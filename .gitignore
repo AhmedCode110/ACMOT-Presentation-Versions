@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local tooling
+node_modules/
+*.log
+.claude/
+
+# Keynote exports and temporary office files (the source deck lives in ~/Desktop/DONT TOUCH)
+~$*
+*.key.tmp
+
+# Optional: uncomment to keep very large media out of Git
+# *.mp4
+# *.mov
