@@ -23,7 +23,8 @@ of the previous one plus the listed changes; older versions were never overwritt
 | v16 | 90 | 59 (17 topics) | Section IX removed; detectors through the ages; problem and AC-MOT explained step by step in simple words |
 | v17 | 91 | 59 (17 topics) | Cue pictures before the cue formulas; simple clue slides (Canny, brightness, Laplacian explained); too-high / too-low examples for the detector settings |
 | v18 | 91 | 59 (17 topics) | Richer AC-MOT idea slide (each block explains what happens, output and detail slides); no “NEW” tags |
-| **v19** | **91** | **59 (17 topics)** | **Videos load only when played, so the deck opens fast on the web — published version — current** |
+| v19 | 91 | 59 (17 topics) | Videos load only when played, so the deck opens fast on the web |
+| **v20** | **91** | **59 (17 topics)** | **Sections menu button (and S key) to jump to any section; pictures load per slide — published version — current** |
 
 ---
 
@@ -68,7 +69,13 @@ of the previous one plus the listed changes; older versions were never overwritt
 ## v08-story-ends-with-v2-no-u2mot
 - Request: no U2MOT anywhere. Transfer section (divider + 2 U2MOT slides), Outline card and the U2MOT phrase on the future-work slide removed; Contributions and Conclusion became Section VIII.
 
-## v19-web-friendly-media  ← current (published on GitHub Pages)
+## v20-section-menu  ← current (published on GitHub Pages)
+- Request: a menu button on the slide to jump to any section when needed.
+- New **Sections** button in the control bar (☰, next to the slide navigator) and the **S** key: a panel lists the nine sections with their Roman numeral, title and first slide number; a click jumps there, the current section is highlighted, Esc closes it. Added to the keyboard help.
+- Also fixed the slow first load reported online: every picture and video now carries `data-src` and is loaded when its slide (or explanation page) is reached, plus the neighbouring slides. The first slide keeps its real `src`. At start the deck loads 2 pictures instead of 70.
+- Slides, text and numbers unchanged (91 slides). Build script: `tools/build_v20.py`.
+
+## v19-web-friendly-media
 - Reason: on GitHub Pages the four videos (47 MB) started downloading immediately and blocked `script.js`, so the online deck stayed blank.
 - Every `<video>` now has `preload="none"`: a clip is fetched only when it is played. Posters, slides, text and numbers are unchanged (91 slides).
 - The site link `https://ahmedcode110.github.io/ACMOT-Presentation-Versions/` opens this version through the root `index.html`. Build script: `tools/build_v19.py`.
