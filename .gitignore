@@ -22,6 +22,8 @@ venv/
 node_modules/
 *.log
 .claude/
+graphify-out/
+CLAUDE.md
 
 # Keynote exports and temporary office files (the source deck lives in ~/Desktop/DONT TOUCH)
 ~$*
