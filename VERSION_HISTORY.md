@@ -24,7 +24,8 @@ of the previous one plus the listed changes; older versions were never overwritt
 | v17 | 91 | 59 (17 topics) | Cue pictures before the cue formulas; simple clue slides (Canny, brightness, Laplacian explained); too-high / too-low examples for the detector settings |
 | v18 | 91 | 59 (17 topics) | Richer AC-MOT idea slide (each block explains what happens, output and detail slides); no “NEW” tags |
 | v19 | 91 | 59 (17 topics) | Videos load only when played, so the deck opens fast on the web |
-| **v20** | **91** | **59 (17 topics)** | **Sections menu button (and S key) to jump to any section; pictures load per slide — published version — current** |
+| v20 | 91 | 59 (17 topics) | Sections menu button (and S key) to jump to any section; pictures load per slide |
+| **v21** | **91** | **59 (17 topics)** | **“Outline” button at the top of every slide (and M key) to go back to the Outline — published version — current** |
 
 ---
 
@@ -69,7 +70,13 @@ of the previous one plus the listed changes; older versions were never overwritt
 ## v08-story-ends-with-v2-no-u2mot
 - Request: no U2MOT anywhere. Transfer section (divider + 2 U2MOT slides), Outline card and the U2MOT phrase on the future-work slide removed; Contributions and Conclusion became Section VIII.
 
-## v20-section-menu  ← current (published on GitHub Pages)
+## v21-outline-button  ← current (published on GitHub Pages)
+- Request: a menu button at the top of every slide that goes back to the Outline, so a section can be picked from there.
+- New **☰ Outline** button at the top right of every slide (inside the slide, so it scales and also shows in presentation mode). It jumps to the Outline slide, where every section card is clickable. The **M** key does the same, and it is listed in the keyboard help.
+- The button hides on the Outline slide itself. Slide headers got `padding-right:170px` so no long title runs under it — checked on all 91 slides: no overlap and no slide overflows.
+- The Sections menu from v20 (bar button and S key) is still there. Slides, text and numbers unchanged. Build script: `tools/build_v21.py`.
+
+## v20-section-menu
 - Request: a menu button on the slide to jump to any section when needed.
 - New **Sections** button in the control bar (☰, next to the slide navigator) and the **S** key: a panel lists the nine sections with their Roman numeral, title and first slide number; a click jumps there, the current section is highlighted, Esc closes it. Added to the keyboard help.
 - Also fixed the slow first load reported online: every picture and video now carries `data-src` and is loaded when its slide (or explanation page) is reached, plus the neighbouring slides. The first slide keeps its real `src`. At start the deck loads 2 pictures instead of 70.
