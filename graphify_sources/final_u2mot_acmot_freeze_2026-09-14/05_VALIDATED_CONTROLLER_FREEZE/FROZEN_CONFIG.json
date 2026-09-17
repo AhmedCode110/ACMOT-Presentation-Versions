@@ -1,0 +1,82 @@
+{
+  "source_framework": "U2MOT",
+  "u2mot_commit": "7411211d17cb893f5fcd6be39cd4e5f91cfe1586",
+  "checkpoint": "visdrone.pth.tar",
+  "checkpoint_sha256": "8cb39ca273dbe620a8551a247b72865ad4f870225351d0937e306980c594c939",
+  "dataset_final": "VisDrone2019-MOT-test-dev",
+  "final_sequences": 17,
+  "sci": {
+    "weights": {
+      "crowd": 0.12949277455301997,
+      "tiny": 0.22174766876599927,
+      "edge": 0.43371337893805056,
+      "night": 0.05355765312756694,
+      "blur": 0.16148852461536325
+    },
+    "smoothing_window": 7,
+    "analysis_stride": 10,
+    "mid_threshold": 0.5185453065646133,
+    "high_threshold": 0.5895547895440134
+  },
+  "actions": {
+    "easy": {
+      "conf": 0.15,
+      "nms": 0.7,
+      "resolution": [
+        1280,
+        704
+      ]
+    },
+    "medium": {
+      "conf": 0.12,
+      "nms": 0.65,
+      "resolution": [
+        1440,
+        800
+      ]
+    },
+    "hard": {
+      "conf": 0.09,
+      "nms": 0.6,
+      "resolution": [
+        1600,
+        896
+      ]
+    }
+  },
+  "tracker_fixed": {
+    "track_high": 0.5,
+    "track_low": 0.1,
+    "match_thresh": 0.8,
+    "track_buffer": 15
+  },
+  "validation": {
+    "sequences": 7,
+    "frames": 2846,
+    "baseline_mota": 75.12732,
+    "acmot_mota": 75.473798,
+    "baseline_idf1": 75.557816,
+    "acmot_idf1": 76.577452,
+    "baseline_ids": 1947,
+    "acmot_ids": 1908,
+    "baseline_fp": 8837,
+    "acmot_fp": 7992,
+    "baseline_fn": 7091,
+    "acmot_fn": 7726,
+    "mota_delta": 0.346478,
+    "idf1_delta": 1.019636,
+    "ids_delta": -39,
+    "fp_delta": -845,
+    "fn_delta": 635
+  },
+  "matched_runtime": {
+    "baseline_fps": 3.707,
+    "acmot_fps": 4.663,
+    "speed_delta_percent": 25.76
+  },
+  "final_test_policy": {
+    "test_dev_used_for_tuning": false,
+    "parameters_locked_before_final_test": true,
+    "no_changes_after_final_test": true
+  }
+}

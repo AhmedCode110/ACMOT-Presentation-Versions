@@ -1,0 +1,52 @@
+MATCHED RUNTIME BENCHMARK
+=========================
+
+Dataset:
+VisDrone2019-MOT-val
+
+Frames:
+2846
+
+Fixed baseline:
+
+conf:
+0.09
+
+NMS:
+0.70
+
+resolution:
+1600x896
+
+Mean frame ms:
+269.72963413247356
+
+Same-method FPS:
+3.7074161436368738
+
+
+Full AC-MOT:
+
+Mean frame ms:
+214.4768486584657
+
+Same-method FPS:
+4.662507894231542
+
+
+Speed delta:
++25.761655%
+
+
+IMPORTANT:
+
+This benchmark uses the same dynamic runtime
+implementation for both systems.
+
+It is intended to isolate the computational
+effect of AC-MOT adaptive detector settings
+from the earlier DataLoader / runtime mismatch.
+
+No thresholds were tuned.
+
+No test-dev results were used.

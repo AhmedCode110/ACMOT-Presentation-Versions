@@ -1,0 +1,106 @@
+U2MOT VALIDATION FAIR COMPARISON
+================================
+
+Dataset:
+VisDrone2019-MOT-val
+
+Sequences:
+7
+
+Frames:
+2846
+
+CMC:
+none for BOTH systems
+
+
+BASELINE
+--------
+
+MOTA:
+75.127320
+
+IDF1:
+75.557816
+
+IDS:
+1947
+
+FP:
+8837
+
+FN:
+7091
+
+Precision:
+87.995164
+
+Recall:
+90.133025
+
+Wall FPS:
+4.922483
+
+
+FULL AC-MOT
+-----------
+
+MOTA:
+75.473798
+
+IDF1:
+76.577452
+
+IDS:
+1908
+
+FP:
+7992
+
+FN:
+7726
+
+Precision:
+88.920313
+
+Recall:
+89.249436
+
+Wall FPS:
+4.584234
+
+
+DELTA
+-----
+
+MOTA:
++0.346478
+
+IDF1:
++1.019636
+
+IDS:
+-39
+
+FP:
+-845
+
+FN:
++635
+
+FPS percent:
+-6.871521%
+
+
+IMPORTANT
+---------
+
+This is a validation/model-selection experiment.
+
+The final test-dev baseline remains:
+
+MOTA = 53.9
+IDF1 = 69.8
+IDS  = 1239
+
+No final test-dev AC-MOT metrics have been produced yet.

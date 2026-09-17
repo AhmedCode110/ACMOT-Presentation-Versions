@@ -1,0 +1,89 @@
+{
+  "method": "validation-only temporal ablation before joint SCI optimization",
+  "test_used": false,
+  "official_visdrone": false,
+  "reference": {
+    "smoothing_window": 7,
+    "analysis_stride": 10,
+    "metrics": {
+      "HOTA": 0.33064013219122707,
+      "DetA": 0.21973183200630925,
+      "AssA": 0.5078911270405013,
+      "MOTA": 0.18164674437597447,
+      "IDF1": 0.36296242459481065,
+      "IDS": 271,
+      "FN": 46609,
+      "FP": 8232,
+      "smoothing_window": 7,
+      "analysis_stride": 10,
+      "FPS": 43.947242385619134,
+      "p95_ms": 41.05921250004485,
+      "mean_imgsz": 725.0372452565003,
+      "mean_conf": 0.21781132809317205,
+      "mean_nms_iou": 0.4736518059568403,
+      "analysis_interval_seconds": 0.3333333333333333,
+      "causal_history_span_seconds": 2.0,
+      "feasible": true
+    }
+  },
+  "candidate_grid": {
+    "smoothing_windows": [
+      1,
+      3,
+      5,
+      7,
+      9
+    ],
+    "analysis_strides": [
+      1,
+      5,
+      10,
+      15,
+      20
+    ],
+    "nominal_tracker_fps": 30.0,
+    "stride_intervals_seconds": {
+      "1": 0.03333333333333333,
+      "5": 0.16666666666666666,
+      "10": 0.3333333333333333,
+      "15": 0.5,
+      "20": 0.6666666666666666
+    },
+    "rationale": "The grid spans every-frame analysis to sub-second temporal subsampling and no smoothing to progressively longer causal averaging. The grid bounds are a declared validation search budget, not claimed optimal operating values."
+  },
+  "selection_rule": "Validation only: FPS>=25 and IDS<=W7/S10 reference; then highest MOTA, lower IDS, higher HOTA, higher IDF1, higher FPS.",
+  "selected": {
+    "smoothing_window": 7,
+    "analysis_stride": 10,
+    "analysis_interval_seconds": 0.3333333333333333,
+    "causal_history_span_seconds": 2.0,
+    "validation_metrics": {
+      "HOTA": 0.33064013219122707,
+      "DetA": 0.21973183200630925,
+      "AssA": 0.5078911270405013,
+      "MOTA": 0.18164674437597447,
+      "IDF1": 0.36296242459481065,
+      "IDS": 271,
+      "FN": 46609,
+      "FP": 8232,
+      "smoothing_window": 7,
+      "analysis_stride": 10,
+      "FPS": 43.947242385619134,
+      "p95_ms": 41.05921250004485,
+      "mean_imgsz": 725.0372452565003,
+      "mean_conf": 0.21781132809317205,
+      "mean_nms_iou": 0.4736518059568403,
+      "analysis_interval_seconds": 0.3333333333333333,
+      "causal_history_span_seconds": 2.0,
+      "feasible": true
+    }
+  },
+  "fixed_during_ablation": [
+    "pretrained YOLOv8n detector",
+    "old SCI cue formulation and detector-control mapping",
+    "tuned ByteTrack configuration",
+    "validation split",
+    "T4 timing protocol when a T4 is used",
+    "TrackEval revision"
+  ]
+}

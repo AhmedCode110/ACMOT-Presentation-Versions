@@ -1,0 +1,36 @@
+{
+  "elapsed_minutes": 87.29422559763333,
+  "search_space_file": "/content/drive/MyDrive/AC-MOT-shared/defensible_acmot_3workers/SCIENTIFIC_SEARCH_SPACE.json",
+  "resolution_csv": "/content/drive/MyDrive/AC-MOT-shared/defensible_acmot_3workers/OPERATING_RESOLUTION_SWEEP.csv",
+  "confidence_csv": "/content/drive/MyDrive/AC-MOT-shared/defensible_acmot_3workers/OPERATING_CONFIDENCE_SWEEP.csv",
+  "nms_csv": "/content/drive/MyDrive/AC-MOT-shared/defensible_acmot_3workers/OPERATING_NMS_SWEEP.csv",
+  "selected_resolution_levels": [
+    512,
+    928,
+    960
+  ],
+  "supported_confidence_values": [
+    0.25,
+    0.3,
+    0.35,
+    0.4,
+    0.45
+  ],
+  "supported_nms_values": [
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65,
+    0.7
+  ],
+  "cue_calibration_anchor": {
+    "resolution": 960,
+    "confidence": 0.35,
+    "nms_iou": 0.35
+  },
+  "scientific_scope": "These ablations justify detector-control operating choices. ByteTrack parameters are intentionally fixed so SCI contribution is not confounded; their evidence must come from the separate tracker-tuning experiment."
+}

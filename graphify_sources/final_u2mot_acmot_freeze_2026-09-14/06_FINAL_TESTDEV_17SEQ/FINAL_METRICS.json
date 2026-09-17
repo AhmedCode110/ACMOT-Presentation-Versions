@@ -1,0 +1,40 @@
+{
+  "baseline_A0": {
+    "MOTA": 53.9,
+    "IDF1": 69.8,
+    "IDS": 1239,
+    "FP": 41385,
+    "FN": 63241
+  },
+  "full_acmot": {
+    "MOTA": 53.76678605352365,
+    "IDF1": 69.84938968519636,
+    "IDP": 74.05105925998244,
+    "IDR": 66.0989255182871,
+    "Precision": 80.39880894269257,
+    "Recall": 71.76500832222251,
+    "FP": 40155,
+    "FN": 64801,
+    "IDS": 1152,
+    "MOTP": 0.22947268057991865
+  },
+  "delta": {
+    "MOTA": -0.13321394647634577,
+    "IDF1": 0.04938968519635978,
+    "IDS": -87,
+    "FP": -1230,
+    "FN": 1560
+  },
+  "runtime": {
+    "frames": 6635,
+    "subprocess_wall_seconds": 1641.0338495550004,
+    "full_acmot_mean_frame_ms": 245.0024914146203,
+    "full_acmot_same_method_fps": 4.081591147200578
+  },
+  "controller_frozen_before_test": true,
+  "test_dev_used_for_tuning": false,
+  "u2mot_commit": "7411211d17cb893f5fcd6be39cd4e5f91cfe1586",
+  "checkpoint_sha256": "8cb39ca273dbe620a8551a247b72865ad4f870225351d0937e306980c594c939",
+  "policy_sha256": "985491bbda4998cdda9bb1005387b52bd6bb837c9cc79109ddf35f8ac12cabc1",
+  "tracking_script_sha256": "3d5a5c74c4200eefcd5b157f1efd922a811ab6838bcd36a9a2bfd7bf5078f6de"
+}

@@ -1,0 +1,1703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AC-MOT — Real-Time Object Detection and Tracking (v58 large explanations)</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="viewport">
+<main class="stage" id="stage">
+
+<section class="slide title-slide" data-sec="0" data-secname="Title" data-title="Title">
+  <div class="title-left">
+    <div class="eyebrow">Master's thesis · Computer Vision</div>
+    <div class="t-sub" style="font-size:34px;margin-top:18px">Real-Time Object Detection and Tracking</div>
+    <h1 style="margin-top:6px">AC-MOT</h1>
+    <div class="t-sub2" style="margin-top:4px">Adaptive Control for Real-Time Multi-Object Tracking</div>
+    <div class="t-people">
+      <div><span class="lbl">By</span><b>Capt. Eng. Ahmed Gouda Ismail</b></div>
+      <div><span class="lbl">Under supervision of</span><b>Dr. Tarek Ahmed Mahmoud</b><b>Dr. Mohamed S. Mohamed</b></div>
+    </div>
+    <div class="t-aff">Military Technical College · Electrical Engineering Branch<br>Computer Engineering and Artificial Intelligence Department</div>
+  </div>
+  <div class="title-right">
+    <div class="img tr-main zoomable"><img src="assets/figures/image15.jpeg" alt="Aerial frame with tracked people"></div>
+    <div class="img tr-inset zoomable"><img src="assets/figures/image8.gif" alt="Tracking example"></div>
+    <div class="tr-tags"><span class="pill sec">Detect</span><span class="pill sec">Track</span><span class="pill sec">Adapt</span></div>
+  </div>
+  <aside class="notes"><p><b>Say:</b> "My thesis is about real-time object detection and tracking. The system is called AC-MOT. It looks at how hard each scene is and changes the detector settings to match."</p></aside>
+</section>
+
+<section class="slide" data-sec="0" data-secname="Title" data-title="Outline">
+  <header class="s-head"><div class="kicker">Presentation structure</div><h2>Short presentation roadmap</h2></header>
+  <div class="s-body">
+    <div class="ol-ppt">
+      <button class="ol-row" data-goto="sec-1"><span class="n">I</span><span class="t"><h3>Introduction and literature survey</h3><p>Why the problem matters and what the survey showed</p></span></button>
+      <button class="ol-row" data-goto="sec-3"><span class="n">II</span><span class="t"><h3>Problem and baseline</h3><p>Why one fixed detector setting is limited</p></span></button>
+      <button class="ol-row" data-goto="sec-4"><span class="n">III</span><span class="t"><h3>AC-MOT method</h3><p>Measure the scene, score it, and adapt the detector</p></span></button>
+      <button class="ol-row" data-goto="sec-5"><span class="n">IV</span><span class="t"><h3>Data and first result</h3><p>VisDrone2019-MOT and the component study</p></span></button>
+      <button class="ol-row" data-goto="sec-6"><span class="n">V</span><span class="t"><h3>V1: validation-driven search</h3><p>Screening, temporal settings, Optuna, and the test result</p></span></button>
+      <button class="ol-row" data-goto="sec-7"><span class="n">VI</span><span class="t"><h3>V2: quality and identity trade-off</h3><p>Multi-objective search and the final choice</p></span></button>
+      <button class="ol-row" data-goto="sec-8"><span class="n">VII</span><span class="t"><h3>Statistical and external checks</h3><p>Paired bootstrap and zero-tuning UAVDT</p></span></button>
+      <button class="ol-row" data-goto="sec-9"><span class="n">VIII</span><span class="t"><h3>Transfer to U2MOT</h3><p>Independent reproduction, recalibration, and final test</p></span></button>
+      <button class="ol-row" data-goto="sec-10"><span class="n">IX</span><span class="t"><h3>Conclusion</h3><p>What was delivered and what comes next</p></span></button>
+    </div>
+  </div>
+  <aside class="notes"><p><b>Say:</b> "This short talk covers the full story in about 20 minutes: motivation, literature survey, problem, method, results, checks, transfer, and conclusion."</p><p><b>Tip:</b> click a card to jump to that part.</p></aside>
+</section>
+
+<section class="slide" id="sec-1" data-sec="1" data-secname="I · Introduction" data-title="Applications" data-explain="x-challenges|Explain the tracking setting">
+  <header class="s-head"><div class="kicker">Section I · Application domains</div><h2>Where Multi-Object Tracking Is Used</h2></header>
+  <div class="s-body g4" style="grid-template-rows:1fr auto;gap:18px 20px">
+    <div class="img zoomable"><img data-src="assets/figures/image7.gif" alt="Traffic"><span class="lbl">Traffic</span></div>
+    <div class="img zoomable"><img data-src="assets/figures/image6.jpeg" alt="Public spaces"><span class="lbl">Public spaces</span></div>
+    <div class="img zoomable"><img data-src="assets/figures/image8.gif" alt="Pedestrians"><span class="lbl">Pedestrian safety</span></div>
+    <div class="img zoomable"><img data-src="assets/figures/image26.jpeg" alt="Drones"><span class="lbl">Drone video</span></div>
+    <div class="card flat"><p>Count cars and measure traffic flow.</p></div>
+    <div class="card flat"><p>Follow crowds in stations and malls.</p></div>
+    <div class="card flat"><p>Watch people near roads and crossings.</p></div>
+    <div class="card flat" style="border:2px solid var(--sec)"><p><b>Our focus:</b> drone video — tiny objects and a small onboard computer.</p></div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Tracking is used in traffic, public spaces, safety and drones. We focus on drone video, the hardest case."</p></aside>
+</section>
+
+<section class="slide" data-sec="1" data-secname="I · Introduction" data-title="Detection and tracking together" data-explain="x-detection-tracking|Explain Detection and Tracking">
+  <header class="s-head"><div class="kicker">Section I · Core idea</div><h2>Detection Finds Objects; Tracking Keeps Their IDs</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>Detection answers <b>what is in one frame</b>. Tracking links those detections across frames so each object keeps the same ID.</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card sec col"><div class="tag">Detection · one frame</div><div class="img zoomable" style="height:300px"><img data-src="assets/figures/image2.png" alt="Detection boxes on one frame"></div><p><b>Input:</b> one frame</p><p><b>Output:</b> boxes, class labels, and confidence scores</p></div>
+      <div class="card sec col"><div class="tag">Tracking · many frames</div><div class="img zoomable" style="height:300px"><img data-src="assets/figures/image3.png" alt="Tracking an object over time"></div><p><b>Input:</b> detections over time</p><p><b>Output:</b> one stable ID for each object</p></div>
+    </div>
+    <div class="flow"><div class="node io">Frame</div><div class="arr"></div><div class="node hot">Detector</div><div class="arr"></div><div class="node io">Boxes</div><div class="arr"></div><div class="node hot">Tracker</div><div class="arr"></div><div class="node good">IDs over time</div></div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Detection finds objects in one frame. Tracking takes these boxes over time and keeps the identity of each object. AC-MOT controls the detector, while ByteTrack keeps the IDs."</p></aside>
+</section>
+
+<section class="slide" data-sec="1" data-secname="I · Introduction" data-title="Tracking metrics summary" data-explain="x-metrics|Explain the Tracking Metrics">
+  <header class="s-head"><div class="kicker">Section I · Evaluation metrics</div><h2>Tracking Metrics: What Each One Tells Us</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>No single metric is enough. We report quality, identity, detection errors, and speed together.</p></div>
+    <div class="g3 grow" style="gap:18px">
+      <div class="card sec"><div class="tag">Overall quality</div><h3>MOTA</h3><p>How well the system detects and tracks objects overall.</p><p class="strong">Higher is better.</p></div>
+      <div class="card sec"><div class="tag">Identity quality</div><h3>IDF1</h3><p>How well the system keeps the correct object identity.</p><p class="strong">Higher is better.</p></div>
+      <div class="card sec"><div class="tag">Balanced tracking</div><h3>HOTA</h3><p>Balances finding objects with linking the right IDs.</p><p class="strong">Higher is better.</p></div>
+    </div>
+    <div class="g2" style="gap:18px">
+      <div class="card"><h3>Identity and detection errors</h3><p><b>IDS:</b> identity switches · <b>FP:</b> false boxes · <b>FN:</b> missed objects</p><p class="strong">For IDS, FP, and FN, lower is better.</p></div>
+      <div class="card"><h3>Speed</h3><p><b>FPS</b> means frames per second. It shows whether the system can run fast enough for live video.</p><p class="strong">Higher is better.</p></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "We use several metrics because they answer different questions. MOTA measures overall quality, IDF1 measures identity, HOTA balances detection and association, IDS counts identity switches, and FPS measures speed."</p></aside>
+</section>
+
+<section class="slide" data-sec="2" data-secname="II · Related work" data-title="Detector benchmark comparison" data-explain="x-bench|Reading the Benchmark">
+  <header class="s-head"><div class="kicker">Section II · Detectors</div><h2>Top Detectors: Benchmark Comparison</h2></header>
+  <div class="s-body col">
+    <table class="tbl" style="font-size:24px">
+      <tr><th>Year</th><th style="text-align:left">Model</th><th style="text-align:left">Type</th><th>mAP</th><th>Speed</th><th>Size</th><th style="text-align:left">Good for</th></tr>
+      <tr><td>2015</td><td style="text-align:left">Faster R-CNN</td><td style="text-align:left">Two-stage</td><td>37.0</td><td>172 ms</td><td>41.8M</td><td style="text-align:left">accurate, too slow for live video</td></tr>
+      <tr><td>2018</td><td style="text-align:left">YOLOv3</td><td style="text-align:left">One-stage</td><td>31.0</td><td>28.6 ms</td><td>61.9M</td><td style="text-align:left">the first truly real-time one</td></tr>
+      <tr class="sel"><td>2023</td><td style="text-align:left">YOLOv8n</td><td style="text-align:left">One-stage</td><td class="best">37.3</td><td class="best">3.2 ms</td><td class="best">3.2M</td><td style="text-align:left"><b>best balance — our choice</b></td></tr>
+      <tr><td>2023</td><td style="text-align:left">YOLOv8s</td><td style="text-align:left">One-stage</td><td>44.9</td><td>12.5 ms</td><td>11.2M</td><td style="text-align:left">more accurate, 4× slower</td></tr>
+      <tr><td>2025</td><td style="text-align:left">YOLO12m</td><td style="text-align:left">One-stage</td><td>52.5</td><td>4.86 ms</td><td>20.2M</td><td style="text-align:left">real-time accuracy leader</td></tr>
+      <tr><td>2020</td><td style="text-align:left">DETR R101</td><td style="text-align:left">Transformer</td><td>42.9</td><td>145 ms</td><td>60.6M</td><td style="text-align:left">elegant, but very slow</td></tr>
+      <tr><td>2025</td><td style="text-align:left">RF-DETR-S</td><td style="text-align:left">Transformer</td><td>52.9</td><td>3.5 ms</td><td>32.1M</td><td style="text-align:left">best published trade-off</td></tr>
+    </table>
+    <div class="note">All numbers on COCO val2017, T4 GPU, TensorRT FP16, 640 × 640, batch 1 — so they can be compared directly.</div>
+    <div class="callout">Compare row 1 with our row: Faster R-CNN and YOLOv8n are almost equally accurate (37.0 vs 37.3 mAP), but YOLOv8n is <b>54× faster</b> (3.2 vs 172 ms) and <b>13× smaller</b>.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "This table compares well-known detectors on the same benchmark. YOLOv8n is as accurate as Faster R-CNN but far faster and smaller."</p></aside>
+</section>
+
+<section class="slide" data-sec="2" data-secname="II · Related work" data-title="Conclusions of the survey" data-explain="x-literature|Explain the Survey Conclusion">
+  <header class="s-head"><div class="kicker">Section II · Synthesis</div><h2>What the Survey Taught Us</h2></header>
+  <div class="s-body col">
+    <div class="g4" style="gap:16px">
+      <div class="kpi"><div class="l">Speed · time per image</div><div class="v" style="font-size:34px">~49× faster</div><div class="s">Faster R-CNN (2015) <b>172 ms</b> → RF-DETR-S (2025) <b>3.5 ms</b> · 172 ÷ 3.5 ≈ 49</div></div>
+      <div class="kpi"><div class="l">Accuracy · COCO mAP</div><div class="v" style="font-size:34px">+43% mAP</div><div class="s">Faster R-CNN (2015) <b>37.0</b> → RF-DETR-S (2025) <b>52.9</b> · (52.9 − 37.0) ÷ 37.0 ≈ 43%</div></div>
+      <div class="kpi"><div class="l">Tracking accuracy · MOT17</div><div class="v" style="font-size:34px">81.7% MOTA</div><div class="s">the <b>highest MOTA</b> in our tracker table: <b>SMILEtrack</b></div></div>
+      <div class="kpi"><div class="l">Fastest detector</div><div class="v" style="font-size:34px">3.5 ms</div><div class="s">per image: <b>RF-DETR-S</b>, the fastest in the detector table</div></div>
+    </div>
+    <div class="callout" style="font-size:26px"><b>Survey conclusion:</b> no single model is best everywhere. The right choice balances speed, compute and accuracy.</div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card sec"><h3>Our chosen baseline</h3><p>After comparing detector and tracker pairs, <b>YOLOv8n + ByteTrack</b> gave the best trade-off for a real-time, modular system.</p></div>
+      <div class="card sec"><h3>What this work tests</h3><p>Other models may score higher in some cases. Our goal is to test whether <b>scene-based adaptive settings</b> improve tracking while staying real-time and cheap.</p></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "From Faster R-CNN in 2015 to RF-DETR-S in 2025, the time per image dropped from 172 to 3.5 milliseconds — about 49 times faster — and COCO accuracy rose from 37.0 to 52.9 mAP, about 43 percent higher. The field got much faster and more accurate, but no model wins everywhere. We chose a light pair and ask a different question: can smart settings help?"</p></aside>
+</section>
+
+<section class="slide" data-sec="3" data-secname="III · Problem & baseline" data-title="The main question" id="sec-3" data-explain="x-problem|Explain the Research Question">
+  <header class="s-head"><div class="kicker">Section III · Research question</div><h2>The Main Question</h2></header>
+  <div class="s-body col">
+    <div class="card sec tc" style="padding:30px 48px"><div class="tag">Our question</div>
+      <p class="lead mt8" style="font-size:50px;line-height:1.22;color:var(--ink)">If the scene keeps changing, <b>why do the detector settings stay the same?</b></p></div>
+    <div class="g3 grow" style="gap:20px">
+      <div class="card"><h3>Confidence threshold</h3><p>How <b>sure</b> the detector must be to keep a box.</p></div>
+      <div class="card"><h3>NMS IoU</h3><p>How much two boxes may <b>overlap</b> before one is removed as a copy.</p></div>
+      <div class="card"><h3>Input size</h3><p>How <b>big</b> the image is when the detector looks at it.</p></div>
+    </div>
+    <div class="callout good">Our idea: let these settings <b>follow the scene</b> — automatically, for every frame, <b>without retraining</b> the detector.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "So our question is simple: if the scene keeps changing, why do the detector settings stay the same? The settings are three: the confidence threshold — how sure the detector must be; the NMS IoU — how much boxes may overlap; and the input size. Our idea is to let them follow the scene."</p></aside>
+</section>
+
+<section class="slide" data-sec="3" data-secname="III · Problem & baseline" data-title="The baseline" data-explain="x-bytetrack|ByteTrack in Detail" id="sec-3">
+  <header class="s-head"><div class="kicker">Section III · Starting point</div><h2>Before Adding Anything: A Baseline</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>First we need a <b>simple, fast starting system</b>. Every later gain is measured <b>against it</b>.</p></div>
+    <div class="flow" style="gap:0">
+      <div class="node io" style="width:160px">Frame</div><div class="arr"></div>
+      <div class="node fx" style="width:250px">Detector<small>YOLOv8n</small></div><div class="arr"></div>
+      <div class="node fx" style="width:250px">Tracker<small>ByteTrack</small></div><div class="arr"></div>
+      <div class="node good" style="width:160px">Tracks</div>
+    </div>
+    <div class="g3 grow" style="gap:16px"><div class="card" style="padding:10px 14px"><div class="chart zoomable" data-chart="baseline-quality" aria-label="Baseline MOTA HOTA and IDF1 bar chart"></div></div><div class="card" style="padding:10px 14px"><div class="chart zoomable" data-chart="baseline-ids" aria-label="Baseline identity switches bar chart"></div></div><div class="card" style="padding:10px 14px"><div class="chart zoomable" data-chart="baseline-fps" aria-label="Baseline FPS bar chart"></div></div></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card sec"><h3>Why this pipeline?</h3><ul class="clean"><li><b>fast</b> — real-time on drone video</li><li><b>modular</b> — detector and tracker are separate parts</li><li>anything we add around them can be <b>measured</b></li></ul></div>
+      <div class="callout warn">This is <b>not</b> ByteTrack’s global score. It means: YOLOv8n + ByteTrack, <b>with our settings and our test protocol</b>, gives 19.729 MOTA.</div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Before adding anything, we need a baseline: YOLOv8n for detection and ByteTrack for tracking. It is fast and modular, so any part we add can be measured. On our test videos it gives 19.729 MOTA."</p><p><b>Careful:</b> This is not ByteTrack's worldwide number — it is YOLOv8n plus ByteTrack under our settings and our protocol.</p></aside>
+</section>
+
+<section class="slide" data-sec="4" data-secname="IV · AC-MOT" data-title="What we add" data-explain="x-method|Explain the AC-MOT Method">
+  <header class="s-head"><div class="kicker">Section IV · The idea</div><h2>What AC-MOT Adds</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>AC-MOT measures scene difficulty before detection, turns it into one score, and chooses detector settings for that scene.</p></div>
+    <div class="g3 grow" style="gap:18px">
+      <div class="card sec"><div class="tag">1 · Measure</div><h3>Scene Analyzer</h3><p>It uses five low-cost cues from the last boxes and a small gray image.</p><p class="strong">Output: five cue values</p></div>
+      <div class="card sec"><div class="tag">2 · Score</div><h3>Scene Complexity Index</h3><p>The five cues are mixed into one score from <b>0 = easy</b> to <b>1 = hard</b>.</p><p class="strong">Output: one SCI score</p></div>
+      <div class="card sec"><div class="tag">3 · Set</div><h3>Smart Calibrator</h3><p>The score selects confidence, NMS IoU, and input size.</p><p class="strong">Output: detector settings</p></div>
+    </div>
+    <div class="flow"><div class="node fx">YOLOv8n detector</div><div class="arr"></div><div class="node good">ByteTrack stays fixed</div><div class="arr"></div><div class="node io">Fair comparison</div></div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "AC-MOT adds three steps before detection. It measures the scene, makes one SCI score, and selects detector settings. YOLOv8n and ByteTrack remain the same, so later gains come from the control method."</p></aside>
+</section>
+
+<section class="slide" data-sec="4" data-secname="IV · AC-MOT" data-title="SCI from frame to score" data-explain="x-sci|How Is SCI Calculated?;x-sci#3|Frame Preparation" id="sec-4">
+  <header class="s-head"><div class="kicker">Section IV · The whole path first</div><h2>From a Frame to SCI — All Steps Together</h2></header>
+  <div class="s-body col" style="gap:20px">
+    <div class="flow" style="align-items:stretch">
+      <div class="node io frag" style="width:170px;font-size:21px">1 · Input frame<small>I = current image</small></div><div class="arr sm frag" style="align-self:center"></div>
+      <div class="node ad frag" style="width:190px;font-size:21px">2 · Prepare<small>shrink to 25%, then gray → G</small></div><div class="arr sm frag" style="align-self:center"></div>
+      <div class="node ad frag" style="width:210px;font-size:21px">3 · Measure 5 cues<small>crowd · tiny (from last boxes)<br>edges · night · blur (from G)</small></div><div class="arr sm frag" style="align-self:center"></div>
+      <div class="node ad frag" style="width:200px;font-size:21px">4 · Mix<small>0.30c + 0.30t + 0.20e + 0.10n + 0.05b</small></div><div class="arr sm frag" style="align-self:center"></div>
+      <div class="node ad frag" style="width:150px;font-size:21px">5 · Clip<small>keep it in 0 → 1</small></div><div class="arr sm frag" style="align-self:center"></div>
+      <div class="node ad frag" style="width:170px;font-size:21px">6 · Smooth<small>mean of last 7</small></div><div class="arr sm frag" style="align-self:center"></div>
+      <div class="node good frag" style="width:150px;font-size:21px">7 · Final SCI<small>0.59 · stable</small></div>
+    </div>
+    <div class="card frag"><div class="row ac jb">
+      <div class="big secc">Smart Calibrator →</div>
+      <div class="g3" style="gap:16px;width:900px">
+        <div class="kpi"><div class="l">confidence</div><div class="v">↓</div><div class="s">keep weak but real boxes</div></div>
+        <div class="kpi"><div class="l">NMS IoU</div><div class="v">↕</div><div class="s">remove duplicates</div></div>
+        <div class="kpi"><div class="l">input size</div><div class="v">↑</div><div class="s">more pixels for tiny objects</div></div>
+      </div></div></div>
+    <div class="callout">Read it left to right: prepare the frame → measure difficulty → mix and clip → smooth 7 readings → the final SCI sets the detector for the next frame.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>How to present:</b> press → to show each step.</p><p><b>Say:</b> "Before the details, here is the whole path at once. Seven small steps turn a frame into one stable difficulty number, and that number sets the detector. The next slides explain each step."</p></aside>
+</section>
+
+<section class="slide" data-sec="4" data-secname="IV · AC-MOT" data-title="Three cues on real pictures" data-explain="x-cues|Explain the Five Cues">
+  <header class="s-head"><div class="kicker">Section IV · Step 1 of 3 — Measure</div><h2>Step 1: First, See the Cues in Real Pictures</h2></header>
+  <div class="s-body g3" style="gap:22px">
+    <div class="card col" style="gap:8px;padding:16px 18px"><div class="tag">Edges · busy or calm?</div>
+      <div class="g2" style="gap:8px;height:190px"><div class="img"><img data-src="assets/figures/generated/small_easy.jpg" alt=""></div><div class="img contain" style="background:#fff"><img data-src="assets/figures/generated/edges_easy.png" alt=""></div></div>
+      <p class="small">Calm sky: edge density <b data-bind="CUE.edgeEasy" data-dec="3">0.021</b></p>
+      <div class="g2" style="gap:8px;height:190px"><div class="img"><img data-src="assets/figures/generated/small_hard.jpg" alt=""></div><div class="img contain" style="background:#fff"><img data-src="assets/figures/generated/edges_hard.png" alt=""></div></div>
+      <p class="small">Busy parking lot: edge density <b data-bind="CUE.edgeHard" data-dec="3">0.295</b></p></div>
+    <div class="card col" style="gap:8px;padding:16px 18px"><div class="tag">Night · is it dark?</div>
+      <div class="img" style="height:190px"><img data-src="assets/figures/generated/gray_day.jpg" alt=""><span class="lbl">Day</span></div>
+      <p class="small">mean gray <b data-bind="CUE.grayDay" data-dec="1">110.6</b> → night flag <b data-bind="CUE.nightDay">0</b></p>
+      <div class="img" style="height:190px"><img data-src="assets/figures/generated/gray_night.jpg" alt=""><span class="lbl">Night</span></div>
+      <p class="small">mean gray <b data-bind="CUE.grayNight" data-dec="1">40.5</b> → night flag <b data-bind="CUE.nightNight">1</b></p></div>
+    <div class="card col" style="gap:8px;padding:16px 18px"><div class="tag">Blur · sharp or smeared?</div>
+      <div class="img" style="height:190px"><img data-src="assets/figures/generated/blur_sharp.jpg" alt=""><span class="lbl">Sharp</span></div>
+      <p class="small">Laplacian variance <b data-bind="CUE.lapSharp" data-dec="0" data-k>4,074</b> → blur flag <b data-bind="CUE.blurSharp">0</b></p>
+      <div class="img" style="height:190px"><img data-src="assets/figures/generated/blur_blurred.jpg" alt=""><span class="lbl">Blurred</span></div>
+      <p class="small">Laplacian variance <b data-bind="CUE.lapBlur" data-dec="0">4</b> → blur flag <b data-bind="CUE.blurBlurred">1</b></p></div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Three cues measured on real pictures: the busy lot has far more edges, the night image is dark, and the blurred copy has almost no sharp changes."</p></aside>
+</section>
+
+<section class="slide" data-sec="4" data-secname="IV · AC-MOT" data-title="Smart Calibrator exact settings" data-explain="x-nms|NMS vs Tracker Match;x-controller|Explain Controller Logic;x-bytetrack#4|Tracker Settings">
+  <header class="s-head"><div class="kicker">Section IV · Step 3 of 3 — Set the detector</div><h2>Step 3: What Changes and What Never Changes</h2></header>
+  <div class="s-body col">
+    <div class="g2" style="gap:22px">
+      <div class="card" style="border-left:6px solid #4F46E5"><div class="tag" style="color:#4F46E5">Detector side · moves every frame</div>
+        <ul class="clean mt8"><li><b>conf</b> — the keep-or-drop line for a box</li><li><b>iou</b> — the NMS overlap threshold</li><li><b>imgsz</b> — the size the frame is fed in at</li></ul>
+        <p class="small muted mt8">Passed straight into model.track(conf=, iou=, imgsz=).</p></div>
+      <div class="card" style="border-left:6px solid #64748B"><div class="tag" style="color:#475569">Tracker side · tuned once, then frozen</div>
+        <table class="tbl mt8" style="font-size:22px"><tr><td>track_high_thresh</td><td>0.18</td><td>track_low_thresh</td><td>0.04</td></tr><tr><td>new_track_thresh</td><td>0.20</td><td>track_buffer</td><td>45</td></tr><tr><td>match_thresh</td><td>0.86</td><td></td><td></td></tr></table>
+        <p class="small muted mt8">Written into the ByteTrack YAML. Never adaptive.</p></div>
+    </div>
+    <div class="callout warn">There are <b>two different IoU values</b>. The calibrator moves the <b>detector's NMS</b> threshold. The one that matches tracks to boxes is <b>match_thresh = 0.86</b>, and it never changes.</div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card sec"><h3>What NMS does</h3><p>Lowering the NMS IoU makes suppression STRONGER — more overlapping boxes are deleted.</p></div>
+      <div class="card sec"><h3>Why tighten it in hard scenes?</h3><p>We already lowered confidence and raised the size, so more duplicates appear. Tightening removes them.</p></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Only three detector settings move. The tracker settings were tuned once and then frozen. Don't mix the detector's NMS IoU with the tracker's match threshold."</p></aside>
+</section>
+
+<section class="slide" data-sec="5" data-secname="V · Setup & first result" data-title="The VisDrone2019-MOT benchmark" id="sec-5" data-explain="x-benchmark|Explain the Dataset Setup">
+  <header class="s-head"><div class="kicker">Section V · Data</div><h2>The VisDrone2019-MOT Benchmark</h2></header>
+  <div class="s-body row">
+    <div class="col" style="width:820px">
+      <table class="tbl kv" style="font-size:25px">
+        <tr><td>Whole benchmark</td><td><b>288 video clips · 262K frames</b> (all VisDrone2019 tasks)</td></tr>
+        <tr><td>Resolution</td><td>1920 × 1080 (Full HD)</td></tr>
+        <tr><td>Altitude</td><td>5 to 120 m above the ground</td></tr>
+        <tr><td>Camera angle</td><td>straight down to tilted</td></tr>
+        <tr><td>Object size</td><td>5 to 30 pixels wide — extremely small</td></tr>
+        <tr><td>Conditions</td><td>daylight, low light, motion blur</td></tr>
+        <tr><td>Class balance</td><td><b>Natural benchmark distribution</b> · not designed with equal class counts</td></tr>
+        <tr><td>Motion source</td><td><b>Both camera motion and object motion</b> · observed motion can combine both</td></tr>
+        <tr><td>Tuning split</td><td>validation · 7 sequences</td></tr>
+        <tr><td>Final test split</td><td><b>test-dev · <span data-bind="visdroneTest.sequences">17</span> sequences · <span data-bind="visdroneTest.frames" data-k>6,635</span> frames</b></td></tr>
+        <tr><td>Used in this work</td><td>7 + 17 = <b>24 sequences</b> of the tracking (MOT) part</td></tr>
+        <tr><td>Density</td><td><span data-bind="visdroneTest.density">32.4</span> objects per frame (<span data-bind="visdroneTest.gtBoxes" data-k>215,014</span> filtered boxes)</td></tr>
+      </table>
+    </div>
+    <div class="col grow">
+      <div class="img zoomable grow"><img data-src="assets/figures/image20.jpeg" alt=""></div>
+      <div class="img zoomable grow"><img data-src="assets/figures/image21.jpeg" alt=""></div>
+      <div class="img zoomable grow"><img data-src="assets/figures/image26.jpeg" alt=""></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "VisDrone2019 is a large drone benchmark: 288 video clips with about 262 thousand frames, for several tasks. It is full-HD drone video with objects only 5 to 30 pixels wide. The data follows natural scene frequencies, so we do not treat it as class-balanced. It includes both camera motion and object motion, which can appear together in the same frame sequence. For tracking we use 24 sequences: we tune on 7 validation videos and test on 17 test-dev videos."</p></aside>
+</section>
+
+<section class="slide" data-sec="5" data-secname="V · Setup &amp; first result" data-title="Ablation result" data-explain="x-ablation#2|Ablation in Detail" id="sec-5">
+  <header class="s-head"><div class="kicker">Section V · Ablation result · validation</div><h2>Baseline vs Full AC-MOT: What Went Up</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>The full AC-MOT improved <b>all three quality scores</b> over the baseline — most of all <b>IDF1</b> (+5.404) and <b>HOTA</b> (+3.227) — at the cost of some <b>speed</b>.</p></div>
+    <div class="row grow" style="gap:20px">
+      <div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="oab-a0a3"></div></div>
+      <div class="col" style="flex:0 0 640px;gap:12px">
+        <table class="tbl" style="font-size:24px">
+          <tr><th style="text-align:left">Metric</th><th>OLD-A0 · Baseline</th><th>OLD-A3 · Full AC-MOT</th><th>Change</th></tr>
+          <tr><td>MOTA ↑</td><td>17.633%</td><td>18.165%</td><td class="best">+0.532</td></tr>
+          <tr><td>HOTA ↑</td><td>29.837%</td><td>33.064%</td><td class="best">+3.227</td></tr>
+          <tr><td>IDF1 ↑</td><td>30.892%</td><td>36.296%</td><td class="best">+5.404</td></tr>
+          <tr><td>IDS ↓</td><td>283</td><td>271</td><td class="best">4.2% fewer</td></tr>
+          <tr><td>FPS ↑</td><td>44.09</td><td>42.085</td><td class="bad strong">−2.005</td></tr>
+        </table>
+        <div class="card" style="border-left:6px solid var(--good);padding:10px 18px"><h3 style="margin:0 0 4px;font-size:26px">What went up</h3><p style="font-size:23px">Keeping the <b>same identity</b> (IDF1, HOTA) improved the most; MOTA rose a little and there were <b>4.2% fewer ID switches</b>.</p></div>
+        <div class="card" style="border-left:6px solid var(--bad);padding:10px 18px"><h3 style="margin:0 0 4px;font-size:26px">The cost</h3><p style="font-size:23px">Speed dropped from <b>44.09 to 42.085 FPS</b> — still above the 25 FPS real-time line.</p></div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Comparing the baseline with the full AC-MOT: MOTA went up by 0.532, HOTA by 3.227 and IDF1 by 5.404, and there were 4.2% fewer ID switches. The biggest gain is in keeping identities. The cost is speed: 44.09 down to 42.085 FPS, which is still real time."</p></aside>
+</section>
+
+<section class="slide" data-sec="7" data-secname="VI · V1 optimization" data-title="Pre-Optuna screening" id="sec-6" data-explain="x-screening|Explain the Pre-Optuna Screening">
+  <header class="s-head"><div class="kicker">Section VI · Before V1</div><h2>Before Optuna: We First Screened the Operating Settings</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>V1 did not start with an arbitrary search space. We first tested reasonable operating values on the <b>7 validation videos</b>, then froze the smaller search space for Optuna.</p></div>
+    <table class="tbl" style="font-size:25px">
+      <tr><th style="text-align:left">Screening stage</th><th>What we tested</th><th>What entered Optuna</th></tr>
+      <tr><td style="text-align:left"><b>Input size</b></td><td>15 values: 512 → 960, step 32</td><td><b>512, 928, 960</b></td></tr>
+      <tr><td style="text-align:left"><b>Confidence</b></td><td>10 values: 0.05 → 0.50</td><td><b>0.25 → 0.45</b></td></tr>
+      <tr><td style="text-align:left"><b>NMS IoU</b></td><td>11 values: 0.30 → 0.80</td><td><b>0.30 → 0.70</b></td></tr>
+      <tr><td style="text-align:left"><b>Temporal settings</b></td><td>25 combinations</td><td><b>window 7, stride 10</b></td></tr>
+    </table>
+    <div class="g3 grow" style="gap:16px">
+      <div class="card"><h3>61 screening runs</h3><p>15 resolution + 10 confidence + 11 NMS + 25 time runs.</p></div>
+      <div class="card"><h3>Then 50 Optuna trials</h3><p>Optuna searched the frozen space for the V1 settings.</p></div>
+      <div class="card" style="border-left:6px solid var(--good)"><h3>Validation only</h3><p>The test set was kept separate for the final judgment.</p></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Before V1, we did not let Optuna search an unlimited space. We first tested input size, confidence, NMS IoU and time settings on the seven validation videos. This gave us a smaller frozen search space. These are screening runs, not V1 trials, and the test set was not used."</p></aside>
+</section>
+
+<section class="slide" data-sec="7" data-secname="VI · V1 optimization" data-title="Temporal screening before V1" id="sec-6" data-explain="x-temporal|Explain the Temporal Sweep">
+  <header class="s-head"><div class="kicker">Section VI · Before V1 · temporal screening</div><h2>Why Window = 7 and Stride = 10?</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>We tested every pair from two fixed lists before V1. The best <b>valid</b> pair was selected from the validation results, then frozen: <b>window = 7</b> and <b>stride = 10</b>.</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="border-top:7px solid #4F46E5;gap:10px">
+        <h3>All values we tried</h3>
+        <table class="tbl" style="font-size:25px">
+          <tr><td style="text-align:left"><b>Smoothing window</b></td><td>1, 3, 5, 7, 9 readings</td></tr>
+          <tr><td style="text-align:left"><b>Analysis stride</b></td><td>1, 5, 10, 15, 20 frames</td></tr>
+          <tr><td style="text-align:left"><b>Total sweep</b></td><td><b>5 × 5 = 25</b> pairs</td></tr>
+        </table>
+        <p class="muted">Every window was paired with every stride, from (1,1) through (9,20). Every pair used the same validation setup.</p>
+      </div>
+      <div class="card col" style="border-top:7px solid #0D9488;gap:10px">
+        <h3>How the sweep chose (7, 10)</h3>
+        <div class="flow" style="gap:10px;flex-wrap:wrap"><div class="node ad" style="width:180px"><b>25 pairs</b><small>run on validation</small></div><div class="arr"></div><div class="node ad" style="width:210px"><b>Filter</b><small>FPS ≥ 25 · IDS ≤ 271</small></div><div class="arr"></div><div class="node good" style="width:180px"><b>Choose</b><small>highest MOTA</small></div></div>
+        <div class="callout">The selected pair: <b>window 7, stride 10</b><br><span class="muted">MOTA 18.1647 · HOTA 33.0640 · IDF1 36.2962 · IDS 271 · FPS 43.9472</span></div>
+        <p class="muted">If two choices were equal, we used lower IDS, then higher HOTA, IDF1 and FPS.</p>
+        <div class="callout warn"><b>Separate stages:</b> 25 time pairs + 50 Optuna trials = 75 validation runs. <b>Optuna Trial 24 is not run 49 of 75.</b></div>
+      </div>
+    </div>
+    <div class="callout">Correct order: <b>25 time pairs → select and freeze (7,10) → freeze the Optuna search space → 50 V1 Optuna trials → select Optuna Trial 24</b>.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Before V1, we tested five smoothing windows: 1, 3, 5, 7 and 9. We also tested five analysis strides: 1, 5, 10, 15 and 20 frames. We ran every combination, so this was 25 runs, not one unexplained choice. We kept valid choices with at least 25 FPS and no more than 271 ID switches. The selected reference was window 7 and stride 10, with MOTA 18.1647, HOTA 33.0640, IDF1 36.2962, IDS 271 and FPS 43.9472. These time settings were frozen before the V1 Optuna trials. The 25 time runs and the 50 Optuna trials are separate stages: 75 validation runs in total, but Optuna Trial 24 is its name inside Optuna, not run 49 of 75."</p><p><b>If asked why:</b> "The window tells us how many recent SCI readings to average. The stride tells us how often to check a frame. Window 7 gives a stable history, while stride 10 avoids checking every frame. The choice comes from the validation sweep, not from Trial 24."</p></aside>
+</section>
+
+<section class="slide" data-sec="7" data-secname="VI · V1 optimization" data-title="Step 4 result: Trial 24" data-explain="x-optuna|Explain Optuna Trial 24">
+  <header class="s-head"><div class="kicker">Section VI · Validation result</div><h2>V1 Selection on the Validation Set</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p><b>Trial 24</b> was selected by the V1 <b>validation-selection rules</b>, and then frozen before the test-set run.</p></div>
+    <div class="g5" style="gap:14px">
+      <div class="kpi"><div class="l">MOTA</div><div class="v">23.038</div></div>
+      <div class="kpi"><div class="l">HOTA</div><div class="v">36.110</div></div>
+      <div class="kpi"><div class="l">IDF1</div><div class="v">40.758</div></div>
+      <div class="kpi hi"><div class="l">IDS</div><div class="v">270</div></div>
+      <div class="kpi hi"><div class="l">FPS</div><div class="v">37.17</div></div>
+    </div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card sec"><h3>V1 selection rules</h3><ul class="clean"><li>FPS must stay acceptable (at least 25)</li><li>IDS must not exceed the reference: <b>271</b> (Old-A3, the initial full AC-MOT on validation)</li><li>then take the <b>highest MOTA</b></li><li><b>50 trials</b> · TPE sampler</li></ul></div>
+      <div class="card"><h3>Validation, not test</h3><p>These numbers come from the <b>validation split</b> used for selection. The test-set comparison follows on the next slides.</p></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "On the validation set, Trial 24 passed both rules and had the highest MOTA among the trials that passed, so it was selected and frozen."</p></aside>
+</section>
+
+<section class="slide" data-sec="7" data-secname="VI · V1 optimization" data-title="V1 on the test set" data-explain="x-v1v2|V1 vs V2 Explained">
+  <header class="s-head"><div class="kicker">Section VI · Test set</div><h2>V1 on the Test Set: The Strongest Quality Result</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>After freezing V1, we tested it <b>once</b>. It gave our <b>biggest quality gain</b> over the baseline.</p></div>
+    <div class="row grow" style="gap:16px"><div class="card" style="flex:1.6;padding:10px 14px"><div class="chart zoomable" data-chart="v1b-quality"></div></div><div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="v1b-ids"></div></div><div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="v1b-fps"></div></div></div>
+    <table class="tbl" style="font-size:25px">
+      <tr><th style="text-align:left">System</th><th>MOTA ↑</th><th>HOTA ↑</th><th>IDF1 ↑</th><th>IDS ↓</th><th>FPS ↑</th></tr>
+      <tr><td>Baseline</td><td>19.729</td><td>28.430</td><td>32.724</td><td>1235</td><td>36.53</td></tr>
+      <tr class="sel"><td>V1</td><td>26.948</td><td>33.835</td><td>41.546</td><td>1184</td><td>38.98</td></tr>
+      <tr><td class="strong">V1 − Baseline</td><td class="best">+7.220 pp</td><td class="best">+5.405</td><td class="best">+8.822</td><td class="best">−4.1%</td><td class="best">+2.46</td></tr>
+    </table>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "After freezing V1 we ran it once on the test set. Against the baseline: MOTA plus 7.22 points, HOTA plus 5.4, IDF1 plus 8.8, 4.1% fewer ID switches, and 2.5 FPS faster. This is our most important quality result."</p></aside>
+</section>
+
+<section class="slide" data-sec="6" data-secname="VII · V2 multi-objective" data-title="Stage 3: why V2" data-explain="x-v1v2#3|V1 vs V2 Explained;x-pareto|Multi-Objective Search" id="sec-7">
+  <header class="s-head"><div class="kicker">Section VII · V2</div><h2>Why V2 Was Created</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>V1 improved quality strongly, but <b>identity switches were not minimized</b>. So a <b>second optimization direction</b> was investigated.</p></div>
+    <div class="g2 grow" style="gap:24px">
+      <div class="card" style="border-top:6px solid #7C3AED"><div class="tag" style="color:#7C3AED">V1 · one objective with rules</div><p class="lead mt8" style="font-size:30px">Highest MOTA, while FPS ≥ 25 and IDS ≤ 271.</p></div>
+      <div class="card" style="border-top:6px solid #0D9488"><div class="tag" style="color:#0D9488">V2 · multi-objective</div><ul class="clean mt8"><li><b>maximize</b> MOTA</li><li><b>minimize</b> IDS</li><li>with an <b>FPS constraint</b></li></ul></div>
+    </div>
+    <div class="callout">V2 was <b>not meant to replace V1</b> everywhere. It is <b>another operating point</b> on the quality / identity / efficiency trade-off.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "V1 chased MOTA under rules. V2 asked for two goals at once — more MOTA and fewer ID switches — while staying fast enough."</p><p><b>Honest:</b> 50 trials were planned; 49 finished.</p></aside>
+</section>
+
+<section class="slide" data-sec="6" data-secname="VII · V2 multi-objective" data-title="V2 on the test set" data-explain="x-v1v2|V1 vs V2 Explained" id="sec-7">
+  <header class="s-head"><div class="kicker">Section VII · Test set</div><h2>V2 on the Test Set</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>V2 is <b>not better than V1</b>. It is a <b>different point</b> on the trade-off.</p></div>
+    <div class="row grow" style="gap:16px"><div class="card" style="flex:1.6;padding:10px 14px"><div class="chart zoomable" data-chart="td3-quality"></div></div><div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="td3-ids"></div></div><div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="td3-fps"></div></div></div>
+    <table class="tbl" style="font-size:24px">
+      <tr><th style="text-align:left">System</th><th>MOTA ↑</th><th>HOTA ↑</th><th>IDF1 ↑</th><th>IDS ↓</th><th>FPS ↑</th></tr>
+      <tr><td>Baseline</td><td>19.729</td><td>28.430</td><td>32.724</td><td>1235</td><td>36.53</td></tr>
+      <tr><td>V1</td><td class="best">26.948</td><td class="best">33.835</td><td class="best">41.546</td><td>1184</td><td>38.98</td></tr>
+      <tr><td>V2</td><td>23.792</td><td>31.218</td><td>37.870</td><td class="best">919</td><td class="best">46.02</td></tr>
+    </table>
+    <div class="g2" style="gap:18px">
+      <div class="note" style="border-left-color:var(--bad)"><b>V2 lost vs V1:</b> MOTA −3.157 pp · HOTA −2.617 · IDF1 −3.676</div>
+      <div class="note" style="border-left-color:var(--good)"><b>V2 gained vs V1:</b> IDS 1184 → 919 (22.4% fewer) · FPS +7.04 · 28.4% fewer false positives</div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "On the test set, V2 loses about 3 MOTA points against V1, and some HOTA and IDF1. But it has 22.4% fewer ID switches, is 7 FPS faster, and has 28.4% fewer false positives. So we do not say V2 is better — they are two points on a trade-off."</p></aside>
+</section>
+
+<section class="slide" data-sec="6" data-secname="VII · V2 multi-objective" data-title="V1 or V2" data-explain="x-choice|Explain the V1 and V2 Choice">
+  <header class="s-head"><div class="kicker">Section VII · Which version?</div><h2>So Which One Is Better — V1 or V2?</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>There is <b>no absolute best</b>. The right version depends on <b>the priority</b>.</p></div>
+    <div class="g2 grow" style="gap:26px">
+      <div class="card col center" style="border-top:8px solid #7C3AED;gap:10px"><div class="tag" style="color:#7C3AED">If the priority is</div>
+        <p class="lead tc">the <b>highest tracking quality</b></p><div class="big" style="font-size:64px;color:#7C3AED">→ V1</div></div>
+      <div class="card col center" style="border-top:8px solid #0D9488;gap:10px"><div class="tag" style="color:#0D9488">If the priority is</div>
+        <p class="lead tc"><b>fewer ID switches</b>, <b>fewer false positives</b> and <b>higher speed</b></p><div class="big" style="font-size:64px;color:#0D9488">→ V2</div></div>
+    </div>
+    <div class="callout">Showing this trade-off clearly is itself a <b>scientific result</b> of the thesis.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "If you ask me which version is best: there is no absolute best. For the highest tracking quality, choose V1. For fewer ID switches, fewer false positives and higher speed, choose V2."</p></aside>
+</section>
+
+<section class="slide" data-sec="8" data-secname="VIII · Statistics & UAVDT" data-title="Paired bootstrap" id="sec-8" data-explain="x-bootstrap|Explain the Paired Bootstrap">
+  <header class="s-head"><div class="kicker">Section VIII · Statistical validation</div><h2>Paired Bootstrap: Is the V1 Gain Real?</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>Maybe a few easy videos made the gain look big? We <b>resampled the test videos 5,000 times</b>. The V1 quality gains stay <b>clearly above zero</b>.</p></div>
+    <div class="xchain"><span class="pill sec">pick test videos at random, with repeats</span>→<span class="pill sec">compute V1 − Baseline</span>→<span class="pill sec">repeat 5,000 times</span>→<span class="pill sec">middle 95% = confidence interval (CI)</span></div>
+    <div class="row grow" style="gap:20px">
+      <div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="boot-v1q"></div></div>
+      <div class="col" style="flex:0 0 560px;gap:14px">
+        <table class="tbl" style="font-size:25px">
+          <tr><th style="text-align:left">V1 − Baseline</th><th>Gain</th><th>95% CI</th></tr>
+          <tr><td>MOTA</td><td class="best">+7.2195</td><td>[5.4362, 9.2934]</td></tr>
+          <tr><td>HOTA</td><td class="best">+5.4051</td><td>[4.1273, 6.9022]</td></tr>
+          <tr><td>IDF1</td><td class="best">+8.8220</td><td>[6.9005, 11.0537]</td></tr>
+        </table>
+        <div class="callout">All three intervals are <b>above zero</b> → the quality gain is <b>statistically strong</b>.</div>
+      </div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "To check that the gain is not caused by a few easy sequences, we used a paired bootstrap with 5,000 resamples. For V1 against the baseline, MOTA plus 7.2 with a 95 percent interval from 5.4 to 9.3; HOTA and IDF1 are also clearly above zero."</p></aside>
+</section>
+
+<section class="slide" data-sec="8" data-secname="VIII · Statistics & UAVDT" data-title="UAVDT with zero tuning" data-explain="x-v1v2#2|V1 vs V2 on UAVDT" id="sec-8">
+  <header class="s-head"><div class="kicker">Section VIII · UAVDT result</div><h2>Cross-Dataset Evidence: UAVDT</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>The improvement <b>transferred to UAVDT without tuning</b>. V1 vs Baseline: MOTA <b>+3.558</b> · HOTA <b>+4.305</b> · IDF1 <b>+6.565</b> · IDS <b>−42.5%</b>. The bootstrap confirmed these main gains are <b>significant</b>.</p></div>
+    <div class="row grow" style="gap:16px">
+      <div class="card" style="flex:1.6;padding:10px 14px"><div class="chart zoomable" data-chart="uav-quality"></div></div>
+      <div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="uav-ids"></div></div>
+      <div class="card grow" style="padding:10px 14px"><div class="chart zoomable" data-chart="uav-fps"></div></div>
+    </div>
+    <table class="tbl" style="font-size:24px">
+      <tr><th style="text-align:left">System</th><th>MOTA ↑</th><th>HOTA ↑</th><th>IDF1 ↑</th><th>IDS ↓</th><th>FPS ↑</th></tr>
+      <tr><td>Baseline</td><td>13.841</td><td>24.085</td><td>27.887</td><td>558</td><td class="best">65.015</td></tr>
+      <tr class="sel"><td>V1</td><td class="best">17.399<span class="dlt good">+25.7%</span></td><td class="best">28.390<span class="dlt good">+17.9%</span></td><td class="best">34.453<span class="dlt good">+23.5%</span></td><td>321<span class="dlt good">−42.5%</span></td><td>58.353<span class="dlt bad">−10.2%</span></td></tr>
+      <tr><td>V2</td><td>16.118<span class="dlt good">+16.5%</span></td><td>26.930<span class="dlt good">+11.8%</span></td><td>32.014<span class="dlt good">+14.8%</span></td><td class="best">308<span class="dlt good">−44.8%</span></td><td>61.462<span class="dlt bad">−5.5%</span></td></tr>
+    </table>
+    <p class="tiny muted" style="margin:0">Small numbers = change compared with the <b>Baseline on UAVDT</b>, in percent of its value · <b class="good">green = better</b> · <b class="bad">red = worse</b></p>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "We ran the frozen systems on UAVDT without changing anything. Both beat the baseline on quality and ID switches. V1 is stronger on quality; V2 has fewer ID switches and is faster than V1."</p><p><b>Careful:</b> this is cross-dataset support, not a state-of-the-art claim.</p><p><b>Then:</b> "The small numbers show the change against the baseline in percent of its value. V1 raises MOTA by 25.7%, HOTA by 17.9% and IDF1 by 23.5%, has 42.5% fewer ID switches and runs 10.2% slower. V2 raises MOTA by 16.5%, HOTA by 11.8% and IDF1 by 14.8%, has 44.8% fewer ID switches and runs 5.5% slower."</p></aside>
+</section>
+
+<section class="slide" data-sec="9" data-secname="IX · U2MOT transfer" data-title="U2MOT reproduction" id="sec-9" data-explain="x-u2mot|Explain the U2MOT Transfer">
+  <header class="s-head"><div class="kicker">Section IX · Transfer study · baseline</div><h2>First, We Reproduced the Published U2MOT Pipeline</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>We started with the published <b>U2MOT</b> method, without AC-MOT, and ran it on the same 17 test-dev sequences.</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col"><h3>Pipeline and data</h3><p>Detector: <b>YOLOX-X</b></p><p>Tracker: <b>U2MOT</b></p><p>VisDrone2019-MOT test-dev</p><p><b>17 sequences · 6,635 frames</b></p><p class="muted">Code changes were only compatibility fixes, not model tuning.</p></div>
+      <div class="card col" style="border-top:7px solid #64748B"><h3>Our reproduced U2MOT baseline</h3><table class="tbl" style="font-size:28px"><tr><td>MOTA</td><td><b>53.900</b></td></tr><tr><td>IDF1</td><td><b>69.800</b></td></tr><tr><td>IDS</td><td><b>1,239</b></td></tr><tr><td>FP</td><td><b>41,385</b></td></tr><tr><td>FN</td><td><b>63,241</b></td></tr></table></div>
+    </div>
+    <div class="callout">This gives us a fixed reference: <b>our independent reproduction of U2MOT without AC-MOT</b>.</div>
+    <div class="note" style="font-size:22px"><b>Important:</b> These values are not copied from the ICCV 2023 paper. They come from an independent reproduction under our project evaluation protocol. Small differences can come from the implementation version, checkpoint, preprocessing, runtime settings, class filtering or evaluation protocol.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "Before adding AC-MOT, we reproduced the published U2MOT pipeline. These are our independent reproduction values, not copied paper values. Small differences may come from the implementation version, checkpoint, preprocessing, runtime settings, class filtering or evaluation protocol. The code changes were only compatibility fixes, not model tuning."</p></aside>
+</section>
+
+<section class="slide" data-sec="9" data-secname="IX · U2MOT transfer" data-title="SCI recalibration for U2MOT" id="sec-9" data-explain="x-u2mot#2|Explain the U2MOT SCI Boundaries">
+  <header class="s-head"><div class="kicker">Section IX · Transfer study · validation only</div><h2>SCI Had to Be Recalibrated for the New Pipeline</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p><b>Weights define how we calculate SCI.</b> Boundaries define how we label the result: Easy, Medium or Hard. We kept the V1 weights and changed only the boundaries for the new U2MOT range.</p></div>
+    <div class="g2" style="gap:22px">
+      <div class="card col"><h3>What stayed fixed</h3><p>V1 weights: <b>0.1295 / 0.2217 / 0.4337 / 0.0536 / 0.1615</b></p><p>Window = <b>7</b> · Stride = <b>10</b></p><p class="muted">No new Optuna search was run on U2MOT.</p></div>
+      <div class="card col" style="border-top:7px solid #7C3AED"><h3>Validation SCI range</h3><p>Minimum <b>0.34155</b> · Mean <b>0.55452</b></p><p>Median <b>0.54897</b> · Maximum <b>0.72456</b></p></div>
+    </div>
+    <table class="tbl" style="font-size:25px"><tr><th style="text-align:left">SCI value</th><th>Scene label</th><th style="text-align:left">How the boundary was set</th></tr><tr><td style="text-align:left"><b>SCI &lt; 0.5185453</b></td><td><b>Easy</b></td><td style="text-align:left">Lower third of validation SCI values</td></tr><tr><td style="text-align:left"><b>0.5185453 ≤ SCI &lt; 0.5895548</b></td><td><b>Medium</b></td><td style="text-align:left">Middle third of validation SCI values</td></tr><tr><td style="text-align:left"><b>SCI ≥ 0.5895548</b></td><td><b>Hard</b></td><td style="text-align:left">Upper third of validation SCI values</td></tr></table>
+    <div class="callout"><b>How we got the limits:</b> calculate SCI at every validation analysis point, sort the values, then use about the <b>33rd percentile</b> and <b>67th percentile</b>. The old V1 limits <b>0.13535 / 0.28729</b> would label nearly all U2MOT points as Hard because the new minimum is <b>0.34155</b>.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "The U2MOT pipeline gives a different SCI range. The weights say how SCI is calculated; the two boundaries say how the result is labelled. We kept the V1 weights, Window 7 and Stride 10. We calculated SCI at every validation analysis point, sorted the values, and used about the 33rd and 67th percentiles. This gives Easy below 0.5185453, Medium from 0.5185453 to below 0.5895548, and Hard at or above 0.5895548. The old V1 limits would place nearly all U2MOT points in Hard because the new minimum is 0.34155. This is unsupervised boundary recalibration, with no tracking metric or test-dev result used."</p></aside>
+</section>
+
+<section class="slide" data-sec="9" data-secname="IX · U2MOT transfer" data-title="U2MOT AC-MOT controller" data-explain="x-u2mot#3|Explain the U2MOT Controller">
+  <header class="s-head"><div class="kicker">Section IX · Transfer study · frozen actions</div><h2>AC-MOT Changed the Detector Settings by Scene Difficulty</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>The U2MOT tracker settings stayed fixed. AC-MOT changed only the detector settings for easy, medium and hard scenes.</p></div>
+    <table class="tbl" style="font-size:27px"><tr><th style="text-align:left">Scene</th><th>Confidence</th><th>NMS IoU</th><th>Input size</th></tr><tr><td style="text-align:left"><b>Easy</b></td><td>0.15</td><td>0.70</td><td>1280 × 704</td></tr><tr><td style="text-align:left"><b>Medium</b></td><td>0.12</td><td>0.65</td><td>1440 × 800</td></tr><tr><td style="text-align:left"><b>Hard</b></td><td>0.09</td><td>0.60</td><td>1600 × 896</td></tr></table>
+    <div class="card"><h3>Tracker settings stayed fixed</h3><p>Track high = <b>0.5</b> · Track low = <b>0.1</b> · Match = <b>0.8</b> · Buffer = <b>15</b></p></div>
+    <div class="callout">Easy scenes use a smaller input. Hard scenes use the full input and a lower confidence limit.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "The transfer keeps the U2MOT tracker fixed. The controller selects one of three detector settings. Easy scenes use 1280 by 704 and confidence 0.15. Medium scenes use 1440 by 800 and confidence 0.12. Hard scenes use 1600 by 896 and confidence 0.09. The tracker values do not change."</p></aside>
+</section>
+
+<section class="slide" data-sec="9" data-secname="IX · U2MOT transfer" data-title="U2MOT final test" data-explain="x-u2mot#4|Explain the U2MOT Final Test">
+  <header class="s-head"><div class="kicker">Section IX · Transfer study · final test-dev</div><h2>Final Test: Quality Stayed Close, IDs and FP Fell</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>AC-MOT did not beat U2MOT on every metric. It kept quality close while reducing identity switches and false positives.</p></div>
+    <table class="tbl" style="font-size:27px"><tr><th style="text-align:left">Metric</th><th>U2MOT baseline</th><th>U2MOT + AC-MOT</th><th>Change</th></tr><tr><td style="text-align:left">MOTA</td><td>53.9000</td><td>53.7668</td><td>−0.1332</td></tr><tr><td style="text-align:left">IDF1</td><td>69.8000</td><td class="best">69.8494</td><td class="best">+0.0494</td></tr><tr><td style="text-align:left">IDS</td><td>1,239</td><td class="best">1,152</td><td class="best">−87</td></tr><tr><td style="text-align:left">FP</td><td>41,385</td><td class="best">40,155</td><td class="best">−1,230</td></tr><tr><td style="text-align:left">FN</td><td class="best">63,241</td><td>64,801</td><td>+1,560</td></tr></table>
+    <div class="g2"><div class="card"><h3>Same-method speed</h3><p>Final AC-MOT: <b>4.082 FPS</b> on 6,635 frames.</p></div><div class="card" style="border-left:6px solid var(--good)"><h3>Correct claim</h3><p><b>Quality was approximately preserved while IDS and FP were reduced.</b></p></div></div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "The final MOTA changed from 53.9000 to 53.7668, a small decrease of 0.1332 points. IDF1 was almost unchanged and rose by 0.0494. Identity switches fell by 87 and false positives fell by 1,230. False negatives increased by 1,560. The correct scientific claim is not that AC-MOT beat U2MOT overall. The result is that AC-MOT transferred to the published pipeline and changed its operating point while keeping quality approximately preserved."</p></aside>
+</section>
+
+<section class="slide" data-sec="10" data-secname="X · Conclusion" data-title="The story in one line" id="sec-10" data-explain="x-conclusion|Explain the Full Story">
+  <header class="s-head"><div class="kicker">Section X · Summary</div><h2>The Whole Story in One Line</h2></header>
+  <div class="s-body col">
+    <div class="flow" style="gap:0"><div class="node fx" style="width:262px;font-size:21px;padding:9px 10px">Baseline<small>YOLOv8n + ByteTrack · 19.729 MOTA</small></div><div class="arr sm"></div><div class="node ad" style="width:262px;font-size:21px;padding:9px 10px">Heuristic AC-MOT<small>ablation: IDF1 +5.404 · HOTA +3.227</small></div><div class="arr sm"></div><div class="node bad" style="width:262px;font-size:21px;padding:9px 10px">Problem<small>hand-picked SCI weights</small></div><div class="arr sm"></div><div class="node ad" style="width:262px;font-size:21px;padding:9px 10px">Optuna + TPE<small>validation only</small></div><div class="arr sm"></div><div class="node good" style="width:262px;font-size:21px;padding:9px 10px">V1<small>26.948 MOTA · 41.546 IDF1</small></div></div>
+    <div class="tc strong muted" style="font-size:26px;line-height:1">↓</div>
+    <div class="flow" style="gap:0"><div class="node bad" style="width:262px;font-size:21px;padding:9px 10px">Problem<small>weak IDS improvement</small></div><div class="arr sm"></div><div class="node ad" style="width:262px;font-size:21px;padding:9px 10px">Multi-objective<small>MOTA ↑ / IDS ↓ · Pareto</small></div><div class="arr sm"></div><div class="node good" style="width:262px;font-size:21px;padding:9px 10px">V2<small>23.792 MOTA · 919 IDS · 46.02 FPS</small></div><div class="arr sm"></div><div class="node good" style="width:262px;font-size:21px;padding:9px 10px">Bootstrap<small>quality gains significant</small></div><div class="arr sm"></div><div class="node good" style="width:262px;font-size:21px;padding:9px 10px">UAVDT<small>zero tuning · gain transfers</small></div></div>
+    <div class="callout tc">Every step answered <b>one question</b> — and opened the next one.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "The whole story: a baseline at 19.7 MOTA; heuristic AC-MOT at 23.2; the weights were hand-picked, so Optuna built V1 at 26.9; V1's ID switches did not improve enough, so a multi-objective search built V2 with 919 ID switches and 46 FPS; and the bootstrap and the zero-tuning UAVDT test confirmed the gains."</p></aside>
+</section>
+
+<section class="slide" data-sec="10" data-secname="X · Conclusion" data-title="Main contributions" id="sec-10" data-explain="x-contributions|Explain the Contributions">
+  <header class="s-head"><div class="kicker">Section X · Contributions</div><h2>Main Contributions</h2></header>
+  <div class="s-body col">
+    <div class="g2 grow" style="gap:22px">
+      <div class="card row ac" style="gap:22px;border-left:8px solid #2563EB"><div class="big" style="font-size:72px;color:#2563EB">1</div><p class="lead" style="font-size:32px">A lightweight <b>Scene Complexity Index</b> built from <b>five low-cost cues</b>.</p></div>
+      <div class="card row ac" style="gap:22px;border-left:8px solid #4F46E5"><div class="big" style="font-size:72px;color:#4F46E5">2</div><p class="lead" style="font-size:32px"><b>Adaptive detector-side control</b> according to scene difficulty.<br><span class="muted" style="font-size:25px">It needs no retraining and no new training data.</span></p></div>
+      <div class="card row ac" style="gap:22px;border-left:8px solid #7C3AED"><div class="big" style="font-size:72px;color:#7C3AED">3</div><p class="lead" style="font-size:32px"><b>Validation-driven joint optimization</b> of SCI weights, regime boundaries and detector operating parameters.</p></div>
+      <div class="card row ac" style="gap:22px;border-left:8px solid #0D9488"><div class="big" style="font-size:72px;color:#0D9488">4</div><p class="lead" style="font-size:32px">We measured the balance between <b>tracking quality, identity stability and speed</b>.<br><span class="muted" style="font-size:25px">We checked the result with a paired bootstrap and a UAVDT test with no new tuning.</span></p></div>
+    </div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "The fourth contribution is simple: we measured the trade-off between tracking quality, identity stability and speed. We checked the result in two ways: a paired bootstrap for the measured differences, and a zero-tuning UAVDT test to see whether the result transfers to another dataset. If time is short, this point can be merged into the validation contribution, but it should not be removed because it shows how we checked the result."</p></aside>
+</section>
+
+<section class="slide" data-sec="10" data-secname="X · Conclusion" data-title="Conclusion: what AC-MOT delivers" data-explain="x-conclusion#2|Explain the Conclusion">
+  <header class="s-head"><div class="kicker">Section X · Conclusion</div><h2>Conclusion</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">In one sentence</div><p>“AC-MOT does <b>not replace</b> the detector or tracker. It adds a <b>scene-aware control layer</b> that changes the detector operating point according to scene complexity.”</p></div>
+    <table class="tbl" style="font-size:30px">
+      <tr><td class="strong">Fixed detector settings</td><td style="text-align:center">→</td><td style="text-align:left">ignore temporal scene variation</td></tr>
+      <tr><td class="strong">SCI</td><td style="text-align:center">→</td><td style="text-align:left">estimates scene complexity</td></tr>
+      <tr><td class="strong">Adaptive controller</td><td style="text-align:center">→</td><td style="text-align:left">selects detector operating parameters</td></tr>
+      <tr><td class="strong" style="color:#7C3AED">V1</td><td style="text-align:center">→</td><td style="text-align:left">prioritizes tracking quality</td></tr>
+      <tr><td class="strong" style="color:#0D9488">V2</td><td style="text-align:center">→</td><td style="text-align:left">prioritizes identity and efficiency trade-offs</td></tr>
+      <tr><td class="strong" style="color:#0891B2">UAVDT</td><td style="text-align:center">→</td><td style="text-align:left">supports cross-dataset transfer</td></tr>
+    </table>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "AC-MOT does not replace the detector or the tracker. It adds a scene-aware control layer. Fixed settings ignore how scenes change; SCI estimates the difficulty; the controller picks the detector settings; V1 favours quality, V2 favours identity and speed, and UAVDT supports transfer."</p></aside>
+</section>
+
+<section class="slide" data-sec="10" data-secname="X · Conclusion" data-title="Directions for future work" data-explain="x-future|Explain the Future Work">
+  <header class="s-head"><div class="kicker">Section X · Future work</div><h2>Directions for Future Work</h2></header>
+  <div class="s-body col">
+    <div class="g2 grow" style="gap:20px">
+      <div class="card" style="border-left:6px solid #16A34A"><h3>1 · Camera-motion compensation</h3><p>The clearest next gain. It targets exactly the ID switches that adaptive input size adds.</p></div>
+      <div class="card" style="border-left:6px solid #0891B2"><h3>2 · Radar-assisted tracking</h3><p>Fuse radar position and speed with image detections. This can help keep IDs during occlusion, blur, and camera motion.</p></div>
+      <div class="card" style="border-left:6px solid #7C3AED"><h3>3 · A proper deep ReID</h3><p>Replace the colour histogram with a small deep appearance model that stays real-time.</p></div>
+      <div class="card" style="border-left:6px solid #B45309"><h3>4 · SCI beyond YOLO</h3><p>Drive RT-DETR or DINO with the same signal, and test on AU-AIR.</p></div>
+    </div>
+    <div class="callout" style="border-left-color:#4F46E5;font-size:22px"><b>5 · Journal publication:</b> prepare an extended paper on AC-MOT for submission.<br><b>Target options to review with the supervisors:</b> Journal of Real-Time Image Processing · Image and Vision Computing · IEEE Access.<br></div>
+    <div class="note"><b>Note:</b> these ideas come from what we measured, not from guesses.</div>
+  </div>
+  <footer class="s-foot"></footer>
+  <aside class="notes"><p><b>Say:</b> "The most useful next step is to combine image detections with radar position and speed. Radar can help when an object is hidden, blurry, or affected by camera motion. We can also improve ReID and test the same SCI idea with other detectors and datasets. For publication, the closest options are Journal of Real-Time Image Processing and Image and Vision Computing. IEEE Access is a broader practical option, but its open-access cost must be checked. No journal has been selected and no paper has been submitted yet; the final choice follows supervisor review."</p></aside>
+</section>
+
+<section class="slide divider" data-sec="0" data-secname="Questions" data-title="Thank you">
+  <div class="dv-bg"><video data-src="assets/videos/highway_reference.mp4" muted loop playsinline data-autoplay poster="assets/figures/image29.jpeg" preload="none"></video></div>
+  <div class="dv-text">
+    <div class="dv-kicker" style="margin-top:0">AC-MOT — adaptive scene calibration for real-time drone tracking</div>
+    <h1 style="font-size:110px">Thank you</h1>
+    <p style="font-size:42px;font-weight:800;color:var(--c0)">Questions?</p>
+    <p class="mt24">Capt. Eng. Ahmed Gouda Ismail · Dr. Tarek Ahmed Mahmoud · Dr. Mohamed S. Mohamed</p>
+  </div>
+  <aside class="notes"><p><b>Say:</b> "Thank you. I'm happy to answer questions."</p><p><b>Tip:</b> press O to jump to any slide.</p></aside>
+</section>
+
+<div class="overlay xview" id="xview" aria-label="Detailed explanation">
+<div class="xstage" id="xstage">
+<div class="xdeck" id="x-challenges" data-label="Tracking challenges">
+<section class="xpage" data-sec="1" data-title="Challenges overview">
+  <header class="s-head"><div class="kicker">Tracking challenges · 1 of 8 — overview</div><h2>Seven Things That Make Tracking Hard</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">The main idea</div><p>Each problem makes the detector <b>miss</b> objects, or makes the tracker <b>mix up</b> their IDs.</p></div>
+    <div class="g4" style="gap:14px"><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/image3.png" alt="Occlusion"></div><h3 style="margin:0">Occlusion</h3><p class="small muted" style="margin:0">Another object blocks it, so the detector sees only part or none of it.</p></div><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/generated/small_hard.jpg" alt="Small objects"></div><h3 style="margin:0">Small objects</h3><p class="small muted" style="margin:0">The object covers few pixels, so its shape and details are hard to detect.</p></div><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/image9.png" alt="Crowds"></div><h3 style="margin:0">Crowds</h3><p class="small muted" style="margin:0">Nearby objects overlap, so the tracker may merge them or swap their IDs.</p></div><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/image28.jpeg" alt="Camera motion"></div><h3 style="margin:0">Camera motion</h3><p class="small muted" style="margin:0">The whole scene moves between frames, so object motion is harder to estimate.</p></div><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/image21.jpeg" alt="Low light"></div><h3 style="margin:0">Low light</h3><p class="small muted" style="margin:0">Low light hides details and lowers contrast, so the detector may miss objects.</p></div><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/generated/blur_blurred.jpg" alt="Motion blur"></div><h3 style="margin:0">Motion blur</h3><p class="small muted" style="margin:0">Fast movement smears the edges, so the box and object identity become less clear.</p></div><div class="card col" style="gap:6px;padding:10px 12px"><div class="img" style="flex:0 0 150px;height:150px"><img data-src="assets/figures/image29.jpeg" alt="Look-alike objects"></div><h3 style="margin:0">Look-alike objects</h3><p class="small muted" style="margin:0">Similar objects look alike, so the tracker can confuse one ID with another.</p></div></div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge occlusion">
+  <header class="s-head"><div class="kicker">Tracking challenges · 2 of 8 — occlusion</div><h2>Occlusion: The Object Is Hidden</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>Something <b>hides the object</b> for a short time — for example a car, a tree or another person.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/image3.png" alt="Before · the person is ID 1"><span class="lbl">Before · the person is ID 1</span></div><div class="img zoomable contain grow"><img data-src="assets/figures/image4.png" alt="After · the same person is ID 8"><span class="lbl">After · the same person is ID 8</span></div><div class="tc"><span class="origin illus">public tracking demo · not our system</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>the detector cannot see it, so there is <b>no box</b></li><li>the tracker must <b>guess</b> where it is</li><li>when it comes back, it may get a <b>new ID</b></li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>A person walks behind the white car. Before: <b>ID 1</b>. After: the same person gets <b>ID 8</b>. This is one ID switch.</p></div>
+        <div class="note">Trackers remember a lost object for a few frames, so a short hide is often OK.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge small objects">
+  <header class="s-head"><div class="kicker">Tracking challenges · 3 of 8 — small objects</div><h2>Small Objects: Too Few Pixels</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>The object is <b>far from the camera</b>, so it looks <b>very small</b> in the picture.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/generated/small_hard.jpg" alt="Cars seen from high up"><span class="lbl">Cars seen from high up</span></div><div class="tc"><span class="origin illus">real video picture</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>few pixels means few details, so the detector is <b>not sure</b> or <b>misses it</b></li><li>a tiny move of the box changes the match a lot</li><li>this happens a lot in <b>drone</b> videos</li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>The COCO dataset calls an object <b>small</b> if it is less than <b>32 × 32 pixels</b>. Many cars here are about that size.</p></div>
+        <div class="note">Later, one cue counts how many boxes are tiny.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge crowds">
+  <header class="s-head"><div class="kicker">Tracking challenges · 4 of 8 — crowds</div><h2>Crowds: Many Objects Close Together</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>Many objects are <b>very close to each other</b>.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/image9.png" alt="A crowded place · boxes cover each other"><span class="lbl">A crowded place · boxes cover each other</span></div><div class="tc"><span class="origin illus">real video picture</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>boxes <b>cover each other</b>, so a correct box can be deleted</li><li>people hide each other again and again</li><li>the tracker can <b>swap</b> the IDs of two people</li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>Here many boxes cover each other. When two people walk past each other, their IDs can <b>swap</b>.</p></div>
+        <div class="note">Later, one cue counts how crowded the scene is.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge camera motion">
+  <header class="s-head"><div class="kicker">Tracking challenges · 5 of 8 — camera motion</div><h2>Camera Motion: The Camera Moves</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>The <b>camera moves</b> (for example on a drone), so <b>everything in the picture moves</b> — even things that stand still.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/image28.jpeg" alt="The camera is on a flying drone"><span class="lbl">The camera is on a flying drone</span></div><div class="card col center" style="gap:6px;flex:0 0 auto"><div class="ex-label">Drawing · a parked car, the camera moves right</div>
+<svg viewBox="0 0 660 190" width="100%">
+  <rect x="10" y="20" width="300" height="150" rx="8" fill="#F8FAFC" stroke="#94A3B8" stroke-width="3"/>
+  <text x="160" y="185" text-anchor="middle" font-size="20" fill="#475569">frame 1</text>
+  <rect x="190" y="75" width="70" height="44" rx="5" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/>
+  <rect x="350" y="20" width="300" height="150" rx="8" fill="#F8FAFC" stroke="#94A3B8" stroke-width="3"/>
+  <text x="500" y="185" text-anchor="middle" font-size="20" fill="#475569">frame 2 (camera moved)</text>
+  <rect x="380" y="75" width="70" height="44" rx="5" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/>
+  <rect x="530" y="75" width="70" height="44" rx="5" fill="none" stroke="#64748B" stroke-width="3" stroke-dasharray="8 6"/>
+  <path d="M525 97 L458 97" stroke="#DC2626" stroke-width="4" marker-end="url(#ah2)"/>
+  <defs><marker id="ah2" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#DC2626"/></marker></defs>
+</svg></div><div class="tc"><span class="origin illus">drawing made by us</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>the tracker guesses the next place from the old movement</li><li>camera movement makes this guess <b>wrong</b></li><li>the object is lost and gets a <b>new ID</b></li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>A car is parked. The drone turns right, so in the picture the car <b>moves left</b>.</p></div>
+        <div class="note">Drone videos, like VisDrone, have a lot of camera movement.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge low light">
+  <header class="s-head"><div class="kicker">Tracking challenges · 6 of 8 — low light</div><h2>Low Light: The Picture Is Dark</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>At <b>night</b> or in shadow, the picture is <b>dark</b>, so things are hard to see.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/image21.jpeg" alt="A night picture"><span class="lbl">A night picture</span></div><div class="img zoomable contain grow"><img data-src="assets/figures/generated/gray_night.jpg" alt="Gray version · very dark"><span class="lbl">Gray version · very dark</span></div><div class="tc"><span class="origin illus">real video picture</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>objects mix with the dark background, so they are <b>missed</b></li><li>noise in the picture can make <b>wrong boxes</b></li><li>colours are lost, so people look more alike</li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>In the night picture, people in dark clothes are hard to see on the dark ground.</p></div>
+        <div class="note">Later, one cue checks if the picture is dark.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge motion blur">
+  <header class="s-head"><div class="kicker">Tracking challenges · 7 of 8 — motion blur</div><h2>Motion Blur: The Picture Is Not Sharp</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>When the object or the camera <b>moves fast</b>, the picture becomes <b>blurry</b>, like a shaky photo.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/generated/blur_sharp.jpg" alt="Sharp"><span class="lbl">Sharp</span></div><div class="img zoomable contain grow"><img data-src="assets/figures/generated/blur_blurred.jpg" alt="Blurry"><span class="lbl">Blurry</span></div><div class="tc"><span class="origin illus">same picture · we added the blur</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>the detector cannot see the shape well, so it is <b>not sure</b> or <b>misses</b> the object</li><li>boxes are placed <b>less exactly</b></li><li>it often comes together with fast movement</li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>Both pictures are the same. We made the lower one blurry on purpose. The small details are gone.</p></div>
+        <div class="note">Later, one cue checks if the picture is blurry.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Challenge look-alike objects">
+  <header class="s-head"><div class="kicker">Tracking challenges · 8 of 8 — look-alike objects</div><h2>Look-Alike Objects: They Look the Same</h2></header>
+  <div class="s-body col">
+    <div class="meaning"><div class="tag">What it means</div><p>Some objects look <b>almost the same</b> — same colour and same shape.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 700px;gap:10px"><div class="img zoomable contain grow"><img data-src="assets/figures/image29.jpeg" alt="Many white cars from above"><span class="lbl">Many white cars from above</span></div><div class="tc"><span class="origin illus">real video picture</span></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card" style="border-left:6px solid var(--bad)"><h3>Why it is a problem</h3><ul class="clean"><li>the tracker cannot tell them apart by how they look</li><li>when they come close, their IDs can <b>swap</b></li><li>from high up, small objects look even more alike</li></ul></div>
+        <div class="card sec"><h3>Example</h3><p>This road has many <b>white cars</b>. When two white cars pass each other, their IDs can swap.</p></div>
+        <div class="note">ID switches (IDS) and IDF1 show this kind of mistake.</div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-controller" data-label="Controller logic">
+<section class="xpage" data-sec="4" data-title="Controller part 1">
+  <header class="s-head"><div class="kicker">Controller logic · Part 1 — confidence</div><h2>SCI Sets a Continuous Confidence Threshold</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">Not just Easy / Medium / Hard</div><p>The controller <b>first calculates a smooth value from SCI</b>: every SCI value gives its own confidence threshold.</p></div>
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">confidence = 0.245 − 0.050 × <span class="hl">SCI</span></div><div class="mt8"><span class="origin manual">manually designed · original controller</span></div></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col center" style="gap:4px;border-top:6px solid var(--good)"><div class="ex-label">Example 1 · easier scene</div>
+        <div class="xeq sm">SCI = <span class="hl">0.20</span></div><div class="xeq sm">0.245 − 0.050 × 0.20</div><div class="xeq">= <b>0.235</b></div><p class="tc">stricter confidence</p></div>
+      <div class="card col center" style="gap:4px;border-top:6px solid var(--bad)"><div class="ex-label">Example 2 · harder scene</div>
+        <div class="xeq sm">SCI = <span class="hl">0.80</span></div><div class="xeq sm">0.245 − 0.050 × 0.80</div><div class="xeq">= <b>0.205</b></div><p class="tc">lower confidence → less conservative detector</p></div>
+    </div>
+    <div class="xchain"><span class="pill sec">SCI ↑</span><span>→ harder scene →</span><span class="pill sec">confidence ↓</span><span>→ more detections are allowed to survive</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Controller part 2">
+  <header class="s-head"><div class="kicker">Controller logic · Part 2 — NMS IoU</div><h2>SCI Sets the NMS IoU Threshold</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">What NMS IoU means</div><p>NMS (Non-Maximum Suppression) keeps the best box and <b>deletes other boxes that overlap it more than the NMS IoU threshold</b>.</p></div>
+    <div class="row grow" style="gap:22px">
+      <div class="col" style="flex:0 0 640px;gap:10px">
+        <div class="card tc" style="padding:10px 16px"><div class="xeq">NMS IoU = 0.490 − 0.050 × <span class="hl">SCI</span></div><div class="mt8"><span class="origin manual">manually designed · original controller</span></div></div>
+        <div class="g2" style="gap:14px">
+          <div class="card tc" style="padding:10px"><div class="ex-label">SCI = 0.40</div><div class="xeq sm">0.490 − 0.050 × 0.40</div><div class="xeq">= <b>0.470</b></div></div>
+          <div class="card tc" style="padding:10px"><div class="ex-label">SCI = 0.80</div><div class="xeq sm">0.490 − 0.050 × 0.80</div><div class="xeq">= <b>0.450</b></div></div>
+        </div>
+        <div class="callout warn"><b>Detector NMS IoU ≠ tracker match threshold.</b> NMS works inside one frame; the tracker threshold links boxes across frames.</div>
+      </div>
+      <div class="card col grow" style="gap:8px"><div class="ex-label">Two overlapping boxes on one car <span class="origin illus">illustration</span></div>
+        <svg viewBox="0 0 520 250" width="100%" height="230"><g font-family="Inter,Helvetica" font-weight="800">
+          <rect x="120" y="120" width="200" height="80" rx="14" fill="#475569"/>
+          <rect x="90" y="70" width="220" height="150" fill="none" stroke="#16A34A" stroke-width="6"/>
+          <rect x="146" y="94" width="220" height="150" fill="none" stroke="#F59E0B" stroke-width="5" stroke-dasharray="12 7"/>
+          <text x="90" y="58" font-size="22" fill="#15803D">box A · score 0.90</text>
+          <text x="376" y="150" font-size="22" fill="#B45309">box B · 0.75</text>
+          <text x="376" y="182" font-size="22" fill="#0F1B33">overlap IoU ≈ 0.46</text></g></svg>
+        <div class="g2" style="gap:12px">
+          <div class="card flat" style="padding:10px 14px;border-left:6px solid var(--bad)"><p><b>Threshold 0.45</b> (SCI 0.80)<br>0.46 &gt; 0.45 → box B is <b>deleted</b></p><p class="small muted">lower threshold = more aggressive suppression</p></div>
+          <div class="card flat" style="padding:10px 14px;border-left:6px solid var(--good)"><p><b>Threshold 0.49</b> (SCI 0.00)<br>0.46 &lt; 0.49 → both boxes <b>stay</b></p><p class="small muted">higher threshold = more overlapping boxes remain</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Controller part 3">
+  <header class="s-head"><div class="kicker">Controller logic · Part 3 — input size</div><h2>SCI Chooses the Input Resolution</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">Three regions</div><p>The input size <b>steps up</b> when SCI crosses <b>0.35</b> and <b>0.60</b>. <span class="origin manual">manually designed · original controller</span></p></div>
+    <svg viewBox="0 0 1400 170" width="100%" height="170"><g font-family="Inter,Helvetica" font-weight="800">
+      <rect x="20" y="40" width="476" height="64" rx="8" fill="#DCFCE7" stroke="#16A34A" stroke-width="3"/>
+      <rect x="496" y="40" width="340" height="64" rx="8" fill="#FEF3C7" stroke="#D97706" stroke-width="3"/>
+      <rect x="836" y="40" width="544" height="64" rx="8" fill="#FEE2E2" stroke="#DC2626" stroke-width="3"/>
+      <text x="258" y="82" font-size="28" fill="#14532D" text-anchor="middle">easier scene · 640</text>
+      <text x="666" y="82" font-size="28" fill="#92400E" text-anchor="middle">medium · 736</text>
+      <text x="1108" y="82" font-size="28" fill="#7F1D1D" text-anchor="middle">hard / complex · 832</text>
+      <g font-size="22" fill="#334155" text-anchor="middle"><text x="30" y="135">0</text><text x="496" y="135">0.35</text><text x="836" y="135">0.60</text><text x="1368" y="135">1</text></g>
+      <g fill="#0F1B33"><path d="M292 34 l-10 -16 h20 z"/><path d="M700 34 l-10 -16 h20 z"/><path d="M1040 34 l-10 -16 h20 z"/></g>
+      <g font-size="20" fill="#0F1B33" text-anchor="middle"><text x="292" y="14">SCI 0.20</text><text x="700" y="14">SCI 0.50</text><text x="1040" y="14">SCI 0.75</text></g>
+      <g font-size="22" fill="#0F1B33" text-anchor="middle"><text x="292" y="162">→ 640</text><text x="700" y="162">→ 736</text><text x="1040" y="162">→ 832</text></g></g></svg>
+    <div class="card tc" style="padding:8px 16px"><p class="fcell" style="font-size:27px">SCI ≤ 0.35 → 640 &nbsp;·&nbsp; 0.35 &lt; SCI ≤ 0.60 → 736 &nbsp;·&nbsp; SCI &gt; 0.60 → 832</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card" style="border-left:6px solid var(--good)"><h3>Lower resolution (640)</h3><ul class="clean"><li>less computation</li><li>higher potential FPS</li></ul></div>
+      <div class="card" style="border-left:6px solid var(--bad)"><h3>Higher resolution (832)</h3><ul class="clean"><li>more image detail</li><li>better chance to keep small objects</li><li>higher computational cost</li></ul></div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Controller part 4">
+  <header class="s-head"><div class="kicker">Controller logic · Part 4 — small fixes</div><h2>The Small Fixes Come After the Main Equations</h2></header>
+  <div class="s-body col">
+
+    <div class="xchain" style="margin-top:4px"><span class="pill sec">1 · SCI</span><span>→</span><span class="pill sec">confidence</span><span>→</span><span class="pill sec">NMS IoU</span><span>→</span><span class="pill sec">resolution</span><span>→</span><span class="pill warn">2 · then check specific cues</span></div>
+    <div class="g3 grow" style="gap:18px">
+      <div class="card col" style="gap:8px;border-top:6px solid #4F46E5"><h3>Crowded, tiny or dark</h3><div class="xeq sm">confidence − 0.012</div>
+        <p>Difficult objects often get <b>weaker detector scores</b>. A slightly lower line keeps useful detections.</p>
+        <div class="card flat tc" style="padding:8px"><div class="ex-label">Example · crowded</div><div class="xeq sm">0.235 − 0.012 = <b>0.223</b></div><p class="small">final confidence before clipping</p></div></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #0D9488"><h3>Blurred</h3><div class="xeq sm">NMS IoU − 0.012</div>
+        <p>A lower NMS IoU makes overlap suppression <b>slightly more aggressive</b>.</p>
+        <div class="card flat tc" style="padding:8px"><div class="ex-label">Example · blur detected</div><div class="xeq sm">0.470 − 0.012 = <b>0.458</b></div></div></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #DC2626"><h3>More than half of the boxes are tiny</h3><div class="xeq sm">input size = 832</div>
+        <p>This <b>overrides</b> the normal size rule, because small objects need more spatial detail.</p>
+        <div class="card flat tc" style="padding:8px"><div class="ex-label">Example</div><p>SCI = 0.45 → normal rule <b>736</b><br>tiny share = 0.60 &gt; 0.50 → <b>832</b></p></div></div>
+    </div>
+    <div class="tc"><span class="origin manual">manually designed · original controller</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Controller part 5">
+  <header class="s-head"><div class="kicker">Controller logic · Part 5 — limits</div><h2>“The Limits Are Applied Again” = Clamping</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">What it means</div><p>After the small fixes, every value is <b>clamped</b> back into its allowed range. <span class="origin manual">manually designed · original controller</span></p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="card col center" style="flex:0 0 560px;gap:4px"><div class="ex-label">Confidence · allowed 0.19 ≤ confidence ≤ 0.28</div>
+        <div class="xeq">0.195</div><div class="xdown">↓ <span class="xeq sm">− 0.012 (crowded)</span></div><div class="xeq bad">0.183</div><div class="xdown">↓ <span class="xeq sm">clamp to the minimum</span></div><div class="xeq good"><b>0.190</b></div></div>
+      <div class="col grow" style="gap:14px">
+        <svg viewBox="0 0 760 150" width="100%" height="150"><g font-family="Inter,Helvetica" font-weight="800">
+          <line x1="40" y1="80" x2="720" y2="80" stroke="#94A3B8" stroke-width="4"/>
+          <rect x="167" y="58" width="453" height="44" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="3"/>
+          <text x="393" y="87" font-size="22" fill="#14532D" text-anchor="middle">allowed 0.19 … 0.28</text>
+          <circle cx="129" cy="80" r="12" fill="#DC2626"/><text x="129" y="40" font-size="22" fill="#B91C1C" text-anchor="middle">0.183</text>
+          <circle cx="167" cy="80" r="12" fill="#16A34A"/><text x="187" y="138" font-size="22" fill="#15803D" text-anchor="middle">0.190</text>
+          <path d="M141 80 h12" stroke="#0F1B33" stroke-width="4"/></g></svg>
+        <div class="card" style="border-left:6px solid #0D9488"><h3>NMS IoU · allowed 0.40 ≤ NMS ≤ 0.52</h3><p>Same idea. With SCI between 0 and 1 and the blur fix, NMS stays between <b>0.428</b> and <b>0.490</b> — already inside the limits. Here the clamp is a <b>safety guard</b>.</p></div>
+        <div class="callout">Clamping stops a value from leaving the tested, safe range — for example, confidence can never fall below 0.19.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Controller complete example">
+  <header class="s-head"><div class="kicker">Controller logic · Complete example</div><h2>One Frame Through the Whole Controller</h2></header>
+  <div class="s-body col">
+
+    <div class="xchain"><span class="pill sec">SCI = 0.50</span><span class="pill bad">crowded = yes</span><span class="pill bad">tiny share = 0.60</span><span class="pill bad">blur = yes</span><span class="pill good">dark = no</span><span><span class="origin illus">illustration · made-up numbers</span></span></div>
+    <div class="g3 grow" style="gap:18px">
+      <div class="card col center" style="gap:4px;border-top:6px solid #4F46E5"><div class="ex-label">Step 1 · confidence</div>
+        <div class="xeq sm">0.245 − 0.050 × 0.50</div><div class="xeq">= 0.220</div><div class="xdown">↓</div><div class="xeq sm">crowded: 0.220 − 0.012</div><div class="xeq">= 0.208</div><div class="xdown">↓</div><p class="tc">inside 0.19 … 0.28 → <b>0.208</b></p></div>
+      <div class="card col center" style="gap:4px;border-top:6px solid #0D9488"><div class="ex-label">Step 2 · NMS IoU</div>
+        <div class="xeq sm">0.490 − 0.050 × 0.50</div><div class="xeq">= 0.465</div><div class="xdown">↓</div><div class="xeq sm">blur: 0.465 − 0.012</div><div class="xeq">= 0.453</div><div class="xdown">↓</div><p class="tc">inside 0.40 … 0.52 → <b>0.453</b></p></div>
+      <div class="card col center" style="gap:4px;border-top:6px solid #DC2626"><div class="ex-label">Step 3 · input size</div>
+        <div class="xeq sm">SCI = 0.50</div><div class="xeq">normal: 736</div><div class="xdown">↓</div><div class="xeq sm">tiny share 0.60 &gt; 0.50</div><div class="xeq">override</div><div class="xdown">↓</div><p class="tc">→ <b>832</b></p></div>
+    </div>
+    <div class="card sec row ac jb" style="padding:12px 26px"><span class="strong" style="font-size:28px">Final detector configuration →</span>
+      <span class="pills"><span class="pill sec" style="font-size:26px">Confidence = 0.208</span><span class="pill sec" style="font-size:26px">NMS IoU = 0.453</span><span class="pill sec" style="font-size:26px">Input size = 832</span></span></div>
+    <p class="tc small muted">The crowded correction is applied once (crowded, tiny or dark share one −0.012 fix).</p>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-cues" data-label="SCI cues">
+<section class="xpage" data-sec="4" data-title="Cue crowd">
+  <header class="s-head"><div class="kicker">SCI cues · 1 of 5 — crowd</div><h2>Crowd: How Many Objects Are There?</h2></header>
+  <div class="s-body col">
+
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">Crowd = min( <span class="hl">tracked boxes in the previous frame</span> ÷ 30 , 1 )</div><div class="mt8"><span class="origin empirical">empirical design constant · not chosen by Optuna</span></div></div>
+    <div class="row grow" style="gap:24px">
+      <table class="tbl" style="font-size:28px;flex:0 0 620px">
+        <tr><th style="text-align:left">Boxes</th><th style="text-align:left">Calculation</th><th>Crowd</th></tr>
+        <tr><td>3</td><td style="text-align:left" class="fcell">3 ÷ 30</td><td class="strong">0.10</td></tr>
+        <tr><td>15</td><td style="text-align:left" class="fcell">15 ÷ 30</td><td class="strong">0.50</td></tr>
+        <tr><td>30</td><td style="text-align:left" class="fcell">30 ÷ 30</td><td class="strong">1.00</td></tr>
+        <tr><td>45</td><td style="text-align:left" class="fcell">45 ÷ 30 = 1.5 → min(1.5, 1)</td><td class="strong bad">still 1.00</td></tr>
+      </table>
+      <div class="col grow" style="gap:14px">
+        <div class="card sec"><h3>Why min(…, 1)?</h3><ul class="clean"><li>keeps the cue between <b>0 and 1</b>, like the other cues</li><li>30 or more objects already counts as <b>fully crowded</b></li><li>stops one very crowded frame from making SCI grow without limit</li></ul></div>
+        <div class="note">30 is a <b>normalization ceiling chosen by design</b>, not a universal value.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Cue tiny">
+  <header class="s-head"><div class="kicker">SCI cues · 2 of 5 — tiny objects</div><h2>Tiny: What Share of the Boxes Is Small?</h2></header>
+  <div class="s-body col">
+
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">Tiny = <span class="hl">boxes smaller than 32 × 32</span> ÷ all boxes</div><div class="mt8"><span class="origin empirical">empirical design constant · not chosen by Optuna</span> <span class="origin illus">32² follows the COCO small-object size</span></div></div>
+    <div class="row grow" style="gap:24px">
+      <div class="card col center" style="flex:0 0 700px;gap:10px"><div class="ex-label">Example · 10 boxes</div>
+        <svg viewBox="0 0 640 150" width="100%" height="150"><g>
+          <rect x="10" y="30" width="96" height="96" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/><rect x="126" y="40" width="80" height="80" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/>
+          <rect x="226" y="50" width="70" height="70" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/><rect x="316" y="40" width="84" height="84" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/>
+          <rect x="420" y="46" width="76" height="76" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/><rect x="516" y="36" width="90" height="90" fill="#DBEAFE" stroke="#2563EB" stroke-width="4"/>
+          <g fill="#FEF3C7" stroke="#D97706" stroke-width="4"><rect x="140" y="130" width="18" height="18"/><rect x="250" y="130" width="16" height="16"/><rect x="440" y="130" width="18" height="18"/><rect x="560" y="130" width="16" height="16"/></g></g></svg>
+        <p class="tc">6 normal boxes and <b>4 tiny boxes</b> (orange)</p>
+        <div class="xeq">Tiny = 4 ÷ 10 = <b>0.40</b></div></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card sec"><h3>Why it matters</h3><p>Tiny objects get <b>weak scores</b> and are easy to lose, so a high Tiny value warns that the scene is hard.</p></div>
+        <div class="note">If there are no boxes, Tiny = 0.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Cue edge">
+  <header class="s-head"><div class="kicker">SCI cues · 3 of 5 — edges</div><h2>Edge: How Busy Is the Background?</h2></header>
+  <div class="s-body col">
+
+    <div class="xchain"><span class="pill sec">frame</span><span>→</span><span class="pill sec">grayscale</span><span>→</span><span class="pill sec">Canny edge map</span><span>→</span><span class="pill sec">edge density = share of edge pixels</span><span>→</span><span class="pill warn">÷ 0.14, max 1</span></div>
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">Edge = min( <span class="hl">edge density</span> ÷ 0.14 , 1 )</div><div class="mt8"><span class="origin empirical">empirical design constant · not chosen by Optuna</span></div></div>
+    <div class="row grow" style="gap:24px">
+      <table class="tbl" style="font-size:28px;flex:0 0 620px">
+        <tr><th style="text-align:left">Edge density</th><th style="text-align:left">Calculation</th><th>Edge</th></tr>
+        <tr><td>0.035</td><td style="text-align:left" class="fcell">0.035 ÷ 0.14</td><td class="strong">0.25</td></tr>
+        <tr><td>0.07</td><td style="text-align:left" class="fcell">0.07 ÷ 0.14</td><td class="strong">0.50</td></tr>
+        <tr><td>0.14</td><td style="text-align:left" class="fcell">0.14 ÷ 0.14</td><td class="strong">1.00</td></tr>
+        <tr><td>0.21</td><td style="text-align:left" class="fcell">1.5 → min(1.5, 1)</td><td class="strong bad">1.00</td></tr>
+      </table>
+      <div class="col grow" style="gap:14px">
+        <div class="card sec"><h3>Meaning</h3><p>Many edges = roads, roofs, trees and markings. A busy background makes <b>ghost boxes</b> and hides real objects.</p></div>
+        <div class="note">Density 0.14 or more already counts as a <b>very busy</b> frame (Edge = 1).</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Cue night">
+  <header class="s-head"><div class="kicker">SCI cues · 4 of 5 — low light</div><h2>Night: Is the Frame Dark?</h2></header>
+  <div class="s-body col">
+
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">Night = 1 if <span class="hl">mean grayscale</span> &lt; 80, otherwise 0</div><div class="mt8"><span class="origin empirical">empirical design constant · not chosen by Optuna</span></div></div>
+    <svg viewBox="0 0 1400 150" width="100%" height="150"><defs><linearGradient id="gray" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>
+      <g font-family="Inter,Helvetica" font-weight="800">
+      <rect x="20" y="40" width="1360" height="56" fill="url(#gray)" stroke="#94A3B8" stroke-width="2"/>
+      <line x1="447" y1="26" x2="447" y2="110" stroke="#DC2626" stroke-width="6"/><text x="447" y="18" font-size="24" fill="#B91C1C" text-anchor="middle">80</text>
+      <g font-size="22" fill="#334155" text-anchor="middle"><text x="30" y="135">0 = black</text><text x="1340" y="135">255 = white</text></g>
+      <path d="M340 110 l-10 18 h20 z" fill="#0F1B33"/><text x="340" y="146" font-size="22" fill="#0F1B33" text-anchor="middle">60</text>
+      <path d="M660 110 l-10 18 h20 z" fill="#0F1B33"/><text x="660" y="146" font-size="22" fill="#0F1B33" text-anchor="middle">120</text></g></svg>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col center" style="border-top:6px solid #0F1B33"><div class="ex-label">Example · night street</div><div class="xeq">mean gray = 60</div><div class="xeq sm">60 &lt; 80</div><div class="xeq">Night = <b>1</b></div></div>
+      <div class="card col center" style="border-top:6px solid #F59E0B"><div class="ex-label">Example · daytime road</div><div class="xeq">mean gray = 120</div><div class="xeq sm">120 ≥ 80</div><div class="xeq">Night = <b>0</b></div></div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="Cue blur">
+  <header class="s-head"><div class="kicker">SCI cues · 5 of 5 — blur</div><h2>Blur: Is the Frame Sharp?</h2></header>
+  <div class="s-body col">
+
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">Blur = 1 if <span class="hl">variance of the Laplacian</span> &lt; 180, otherwise 0</div><div class="mt8"><span class="origin empirical">empirical design constant · not chosen by Optuna</span></div></div>
+    <div class="row grow" style="gap:24px">
+      <div class="card col" style="flex:0 0 640px;gap:10px"><h3>Variance of the Laplacian, simply</h3>
+        <div class="xchain" style="justify-content:flex-start"><span class="pill sec">Laplacian</span><span>= finds sudden brightness changes (sharp edges)</span></div>
+        <ul class="clean"><li><b>Sharp image</b> → many strong changes → <b>high</b> variance</li><li><b>Blurred image</b> → changes are smoothed out → <b>low</b> variance</li></ul></div>
+      <div class="col grow" style="gap:14px">
+        <div class="card col center" style="border-top:6px solid var(--bad)"><div class="ex-label">Example · shaking camera</div><div class="xeq">variance = 90 &lt; 180 → Blur = <b>1</b></div></div>
+        <div class="card col center" style="border-top:6px solid var(--good)"><div class="ex-label">Example · steady camera</div><div class="xeq">variance = 350 ≥ 180 → Blur = <b>0</b></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-sci" data-label="SCI calculation">
+<section class="xpage" data-sec="4" data-title="SCI weighted example">
+  <header class="s-head"><div class="kicker">SCI calculation · 1 of 3</div><h2>From Five Cues to One SCI Value</h2></header>
+  <div class="s-body col">
+
+    <div class="xchain"><span class="pill sec">Crowd</span><span class="pill sec">Tiny</span><span class="pill sec">Edge</span><span class="pill sec">Night</span><span class="pill sec">Blur</span><span>→ × weight → add →</span><span class="pill warn">SCI</span><span><span class="origin illus">illustration · made-up numbers</span></span></div>
+    <table class="tbl" style="font-size:27px">
+      <tr><th style="text-align:left">Cue</th><th style="text-align:left">What was measured</th><th>Cue value</th><th>Initial weight</th><th>Contribution</th></tr>
+      <tr><td>Crowd</td><td style="text-align:left">15 boxes → 15 ÷ 30</td><td>0.50</td><td>× 0.30</td><td class="strong">0.15</td></tr>
+      <tr><td>Tiny</td><td style="text-align:left">6 of 15 boxes are tiny</td><td>0.40</td><td>× 0.30</td><td class="strong">0.12</td></tr>
+      <tr><td>Edge</td><td style="text-align:left">density 0.07 → 0.07 ÷ 0.14</td><td>0.50</td><td>× 0.20</td><td class="strong">0.10</td></tr>
+      <tr><td>Night</td><td style="text-align:left">mean gray 60 &lt; 80</td><td>1</td><td>× 0.10</td><td class="strong">0.10</td></tr>
+      <tr><td>Blur</td><td style="text-align:left">variance 350 ≥ 180</td><td>0</td><td>× 0.05</td><td class="strong">0.00</td></tr>
+    </table>
+    <div class="card sec tc" style="padding:12px 20px"><div class="xeq">SCI = 0.15 + 0.12 + 0.10 + 0.10 + 0.00 = <span class="hl"><b>0.47</b></span></div>
+      <div class="mt8"><span class="origin manual">weights manually designed · initial SCI</span> <span class="origin empirical">cue limits: empirical design constants</span></div></div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="SCI stabilise">
+  <header class="s-head"><div class="kicker">SCI calculation · 2 of 3</div><h2>Then SCI Is Clipped, Smoothed and Updated Every 10 Frames</h2></header>
+  <div class="s-body col">
+
+    <div class="g3 grow" style="gap:20px">
+      <div class="card col" style="gap:10px;border-top:6px solid #4F46E5"><h3>1 · Clip to [0, 1]</h3><p>If the weighted sum leaves 0 … 1, it is cut back into the range.</p><div class="xeq sm">0.47 → stays <b>0.47</b></div></div>
+      <div class="card col" style="gap:10px;border-top:6px solid #7C3AED"><h3>2 · Smooth · window = 7</h3><p>SCI = the mean of the last 7 readings, so one odd frame changes little.</p>
+        <p class="fcell" style="font-size:24px">0.40, 0.42, 0.45, 0.47, 0.46, 0.48, 0.51</p><div class="xeq sm">3.19 ÷ 7 = <b>0.456</b></div></div>
+      <div class="card col" style="gap:10px;border-top:6px solid #0D9488"><h3>3 · Analyse every 10 frames</h3><p>The scene changes over seconds, not single frames. The last SCI is reused in between.</p><div class="xeq sm">30 FPS → 3 analyses per second</div></div>
+    </div>
+    <div class="tc"><span class="origin empirical">window 7 and stride 10: fixed design constants · not chosen by Optuna</span> <span class="origin illus">illustration · made-up numbers</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="4" data-title="SCI frame preparation">
+  <header class="s-head"><div class="kicker">SCI calculation · 3 of 3</div><h2>Preparing the Frame and Where Each Cue Gets Its Data</h2></header>
+  <div class="s-body col" style="gap:0">
+    <div class="meaning"><div class="tag">The key point</div><p><b>25% downscaling is a speed step for scene analysis, not for object detection.</b> The small image is never used to find cars or people.</p></div>
+    <div class="card col" style="gap:10px;border-left:6px solid #2563EB;padding:9px 18px"><h3>Two sources for the five cues</h3><div class="xchain" style="justify-content:flex-start;font-size:24px"><span class="pill sec">Original frame</span><span>→</span><span class="pill sec">Previous detection boxes</span><span>→</span><span class="pill good">Crowd + Tiny</span></div><p class="small muted" style="margin:0">These two cues use the previous boxes. The analyzer does not rediscover objects from the small image.</p><div class="xchain" style="justify-content:flex-start;font-size:24px"><span class="pill sec">Original frame</span><span>→</span><span class="pill warn">25% downscale</span><span>→</span><span class="pill warn">Grayscale</span><span>→</span><span class="pill good">Edge + Low-light + Blur</span></div><p class="small muted" style="margin:0">Only these three visual cues use the 25% grayscale frame.</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:8px;border-top:6px solid #7C3AED"><h3>What the visual path measures</h3><ul class="clean"><li><b>Edge</b>: Canny edge density</li><li><b>Low-light</b>: mean gray level</li><li><b>Blur</b>: variance of the Laplacian</li></ul></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #0F766E"><h3>Why it is fast</h3><p>25% width × 25% height gives:</p><p class="strong" style="font-size:30px">0.25 × 0.25 = 0.0625</p><p>Only <b>6.25%</b> of the original pixels, about <b>1/16</b>. Fine detail is reduced, but the measurements stay in the same defined domain.</p></div>
+    </div>
+    <div class="callout">The edge, brightness and blur thresholds were designed and calibrated with this same 25% preprocessing pipeline, so each threshold is interpreted in the same measurement domain.</div>
+    <div class="tc"><span class="origin empirical">empirical design constant</span> <span class="origin empirical">25% scale · design choice</span></div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-optuna" data-label="Optuna V1">
+<section class="xpage" data-sec="7" data-title="Optuna what a trial contains">
+  <header class="s-head"><div class="kicker">Optuna V1 · 1 of 3</div><h2>Optuna Proposes a Complete Configuration</h2></header>
+  <div class="s-body col">
+
+    <div class="g2" style="gap:18px">
+      <div class="card" style="border-left:6px solid var(--bad)"><h3 class="bad">Optuna does not…</h3><ul class="clean x"><li>calculate SCI itself</li><li>train a neural network — it is not an AI model</li><li>try values on a fixed grid or blindly at random</li></ul></div>
+      <div class="card" style="border-left:6px solid var(--good)"><h3 class="good">Optuna does…</h3><ul class="clean v"><li>propose <b>one complete parameter set</b> per trial</li><li>read the trial’s validation result</li><li>use earlier results to propose the next set (TPE)</li></ul></div>
+    </div>
+    <table class="tbl grow" style="font-size:25px">
+      <tr><th style="text-align:left">Each trial contains</th><th style="text-align:left">Parameters</th><th style="text-align:left">Selected in V1 Trial 24</th></tr>
+      <tr><td>SCI weights</td><td style="text-align:left">w_crowd · w_tiny · w_edge · w_night · w_blur</td><td style="text-align:left" class="fcell">0.1295 · 0.2217 · 0.4337 · 0.0536 · 0.1615</td></tr>
+      <tr><td>regime boundaries</td><td style="text-align:left">threshold_mid · threshold_high</td><td style="text-align:left" class="fcell">0.13535 · 0.28729</td></tr>
+      <tr><td>detector parameters</td><td style="text-align:left">conf_easy · conf_hard · nms_easy · nms_hard</td><td style="text-align:left" class="fcell">0.30 · 0.40 · 0.35 · 0.35</td></tr>
+    </table>
+    <div class="tc"><span class="origin optuna">optimization-selected · V1 Trial 24</span> <span class="origin illus">weights rounded here; exact values on the main slides</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="Optuna one trial loop">
+  <header class="s-head"><div class="kicker">Optuna V1 · 2 of 3</div><h2>One Trial, Step by Step</h2></header>
+  <div class="s-body col">
+
+    <div class="row grow" style="gap:30px">
+      <div class="xsteps col" style="flex:0 0 700px">
+        <div class="node ad">configuration proposed by Optuna</div><div class="xdown">↓</div>
+        <div class="node">validation run</div><div class="xdown">↓</div>
+        <div class="node">SCI calculated for each analysed frame</div><div class="xdown">↓</div>
+        <div class="node">Easy / Medium / Hard decision</div><div class="xdown">↓</div>
+        <div class="node">detector settings for that regime</div><div class="xdown">↓</div>
+        <div class="node">detection + tracking</div><div class="xdown">↓</div>
+        <div class="node good">MOTA · HOTA · IDF1 · IDS · FPS</div><div class="xdown">↓</div>
+        <div class="node ad">trial result → next TPE proposal</div>
+      </div>
+      <div class="col grow" style="gap:16px">
+        <div class="card sec"><h3>V1 rules for a valid result</h3><ul class="clean"><li>FPS ≥ 25</li><li>IDS ≤ 271 (original full AC-MOT)</li><li>best = highest MOTA among valid trials</li></ul></div>
+        <div class="callout">The whole pipeline runs <b>for every trial</b> — 50 trials in V1, on validation videos only.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="Optuna how TPE learns">
+  <header class="s-head"><div class="kicker">Optuna V1 · 3 of 3</div><h2>How Later Trials Use Earlier Trials (TPE)</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">The main idea</div><p>TPE (Tree-structured Parzen Estimator) is a <b>sequential Bayesian method</b>: every finished trial changes where the next trial is likely to look.</p></div>
+    <div class="flow grow" style="align-items:stretch;gap:0">
+      <div class="card col" style="width:420px;gap:8px"><div class="ex-label">1 · early trials</div><p>The first trials explore the allowed ranges.</p></div><div class="arr" style="align-self:center"></div>
+      <div class="card col" style="width:440px;gap:8px"><div class="ex-label">2 · split the history</div><p>TPE separates earlier trials into a <b>better group</b> and <b>the rest</b>.</p></div><div class="arr" style="align-self:center"></div>
+      <div class="card col" style="width:440px;gap:8px"><div class="ex-label">3 · propose</div><p>New values are proposed <b>more often where the better trials were</b>, while still exploring.</p></div>
+    </div>
+    <div class="g2" style="gap:18px">
+      <div class="callout warn">Not a grid search and not pure random search: <b>trial 30 is influenced by trials 1–29</b>.</div>
+      <div class="callout">A fixed random seed (42) makes the V1 search <b>repeatable</b>.</div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-regimes" data-label="V1 SCI ranges">
+<section class="xpage" data-sec="7" data-title="Regimes are parameters">
+  <header class="s-head"><div class="kicker">V1 SCI ranges · 1 of 2</div><h2>The Easy / Medium / Hard Boundaries Were Optimized</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">The main idea</div><p>threshold_mid and threshold_high were <b>optimization parameters</b>, searched together with the weights — <b>not chosen by hand after looking at SCI values</b>. <span class="origin optuna">optimization-selected · V1 Trial 24</span></p></div>
+    <svg viewBox="0 0 1400 112" width="100%" height="112"><g font-family="Inter,Helvetica" font-weight="800">
+      <rect x="20" y="14" width="184" height="50" rx="6" fill="#DCFCE7" stroke="#16A34A" stroke-width="3"/>
+      <rect x="204" y="14" width="207" height="50" rx="6" fill="#FEF3C7" stroke="#D97706" stroke-width="3"/>
+      <rect x="411" y="14" width="969" height="50" rx="6" fill="#FEE2E2" stroke="#DC2626" stroke-width="3"/>
+      <text x="112" y="48" font-size="26" fill="#14532D" text-anchor="middle">Easy</text><text x="307" y="48" font-size="26" fill="#92400E" text-anchor="middle">Medium</text><text x="895" y="48" font-size="26" fill="#7F1D1D" text-anchor="middle">Hard</text>
+      <g font-size="22" fill="#334155" text-anchor="middle"><text x="30" y="98">0</text><text x="204" y="98">0.13535</text><text x="411" y="98">0.28729</text><text x="1368" y="98">1</text></g></g></svg>
+    <table class="tbl grow" style="font-size:27px">
+      <tr><th style="text-align:left">Parameter</th><th style="text-align:left">Selected value (Trial 24)</th><th style="text-align:left">Regime rule</th></tr>
+      <tr><td>threshold_mid</td><td style="text-align:left" class="fcell">0.13534938199219218</td><td style="text-align:left"><b class="good">Easy</b>: SCI &lt; 0.13535</td></tr>
+      <tr><td>threshold_high</td><td style="text-align:left" class="fcell">0.28728676236279177</td><td style="text-align:left"><b class="warn">Medium</b>: 0.13535 ≤ SCI &lt; 0.28729</td></tr>
+      <tr><td></td><td></td><td style="text-align:left"><b class="bad">Hard</b>: SCI ≥ 0.28729</td></tr>
+    </table>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="Weights move a frame">
+  <header class="s-head"><div class="kicker">V1 SCI ranges · 2 of 2</div><h2>Changing the Weights Can Move the Same Frame</h2></header>
+  <div class="s-body col">
+
+    <div class="card flat row ac jb" style="padding:10px 22px"><span class="strong">One frame (one reading, before smoothing):</span><span class="pills"><span class="pill">Crowd 0.10</span><span class="pill">Tiny 0</span><span class="pill">Edge 0.50</span><span class="pill">Night 0</span><span class="pill">Blur 0</span></span></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:8px;border-top:6px solid #94A3B8"><h3>Initial hand-designed weights</h3>
+        <div class="xeq sm">0.30 × 0.10 + 0.20 × 0.50</div><div class="xeq">SCI = <b>0.130</b></div>
+        <p>0.130 &lt; 0.13535 → <b class="good">Easy</b></p><div><span class="origin manual">manually designed weights</span></div></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #7C3AED"><h3>V1 Trial 24 weights</h3>
+        <div class="xeq sm">0.1295 × 0.10 + 0.4337 × 0.50</div><div class="xeq">SCI ≈ <b>0.230</b></div>
+        <p>0.13535 ≤ 0.230 &lt; 0.28729 → <b class="warn">Medium</b></p><div><span class="origin optuna">optimization-selected · V1 Trial 24</span></div></div>
+    </div>
+    <div class="callout">Same frame, same cues — different weights give a <b>different SCI</b>, so the frame can land in a <b>different regime</b> and get <b>different detector settings</b>. That is why weights and boundaries were searched together.</div>
+    <p class="tc small muted">Illustration: both weight sets are compared against the V1 boundaries only to show the effect.</p>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-nms" data-label="NMS vs tracker match">
+<section class="xpage" data-sec="4" data-title="NMS vs tracker match">
+  <header class="s-head"><div class="kicker">Detector vs tracker</div><h2>Detector NMS IoU ≠ Tracker Match Threshold</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">Two different operations</div><p><b>NMS</b> cleans duplicate boxes <b>inside one frame</b>. The <b>tracker match threshold</b> links boxes <b>across frames</b> to existing tracks.</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:8px;border-top:6px solid #4F46E5"><h3>Detector NMS IoU · frame t only</h3>
+        <svg viewBox="0 0 560 210" width="100%" height="200"><g font-family="Inter,Helvetica" font-weight="800">
+          <rect x="150" y="90" width="200" height="80" rx="14" fill="#475569"/>
+          <rect x="120" y="50" width="240" height="140" fill="none" stroke="#16A34A" stroke-width="6"/>
+          <rect x="140" y="64" width="240" height="140" fill="none" stroke="#DC2626" stroke-width="4" stroke-dasharray="12 7"/>
+          <text x="120" y="38" font-size="22" fill="#15803D">kept (0.90)</text><text x="392" y="140" font-size="22" fill="#B91C1C">deleted duplicate</text></g></svg>
+        <p>Removes <b>duplicate detector boxes</b> on the same object. Controlled by AC-MOT (0.40 … 0.52).</p></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #64748B"><h3>Tracker match threshold · frame t−1 → t</h3>
+        <svg viewBox="0 0 560 210" width="100%" height="200"><g font-family="Inter,Helvetica" font-weight="800">
+          <rect x="60" y="60" width="160" height="110" fill="none" stroke="#94A3B8" stroke-width="5" stroke-dasharray="10 7"/><text x="60" y="48" font-size="22" fill="#64748B">track ID 7 (t−1)</text>
+          <rect x="300" y="70" width="160" height="110" fill="none" stroke="#2563EB" stroke-width="6"/><text x="300" y="205" font-size="22" fill="#1D4ED8">new detection (t)</text>
+          <path d="M226 115 C255 105 270 110 294 120" fill="none" stroke="#0F1B33" stroke-width="4"/><path d="M294 120 l-16 -2 l8 -12 z" fill="#0F1B33"/>
+          <text x="248" y="92" font-size="22" fill="#0F1B33" text-anchor="middle">link?</text></g></svg>
+        <p>Decides whether a new box <b>belongs to an existing track</b>. ByteTrack setting <b>match_thresh = 0.86</b>, tuned once and frozen — <b>not</b> changed by AC-MOT.</p></div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-metrics" data-label="Tracking metrics">
+<section class="xpage" data-sec="1" data-title="Metrics example">
+  <header class="s-head"><div class="kicker">Tracking metrics · 1 of 6 — the example</div><h2>One Small Tracking Example</h2></header>
+  <div class="s-body col">
+
+    <div class="card" style="padding:8px 18px"><svg viewBox="0 0 1280 250" width="100%" height="236"><g font-family="Inter,Helvetica" font-weight="800" text-anchor="middle">
+      <g font-size="22" fill="#64748B"><text x="310" y="26">frame 1</text><text x="510" y="26">frame 2</text><text x="710" y="26">frame 3</text><text x="910" y="26">frame 4</text><text x="1110" y="26">frame 5</text></g>
+      <g font-size="24" fill="#0F1B33" text-anchor="end"><text x="200" y="85">Person A</text><text x="200" y="160">Person B</text><text x="200" y="232">Tree</text></g>
+      <g stroke-width="3"><rect x="220" y="50" width="180" height="56" rx="10" fill="#DCFCE7" stroke="#16A34A"/><rect x="420" y="50" width="180" height="56" rx="10" fill="#DCFCE7" stroke="#16A34A"/><rect x="620" y="50" width="180" height="56" rx="10" fill="#DCFCE7" stroke="#16A34A"/><rect x="820" y="50" width="180" height="56" rx="10" fill="#FEE2E2" stroke="#DC2626"/><rect x="1020" y="50" width="180" height="56" rx="10" fill="#FEE2E2" stroke="#DC2626"/>
+        <rect x="220" y="124" width="180" height="56" rx="10" fill="#DBEAFE" stroke="#2563EB"/><rect x="420" y="124" width="180" height="56" rx="10" fill="#DBEAFE" stroke="#2563EB"/><rect x="620" y="124" width="180" height="56" rx="10" fill="#F8FAFC" stroke="#94A3B8" stroke-dasharray="8 6"/><rect x="820" y="124" width="180" height="56" rx="10" fill="#DBEAFE" stroke="#2563EB"/><rect x="1020" y="124" width="180" height="56" rx="10" fill="#DBEAFE" stroke="#2563EB"/>
+        <rect x="820" y="196" width="180" height="50" rx="10" fill="#FEF3C7" stroke="#D97706"/></g>
+      <g font-size="26"><text x="310" y="87" fill="#14532D">ID 1</text><text x="510" y="87" fill="#14532D">ID 1</text><text x="710" y="87" fill="#14532D">ID 1</text><text x="910" y="87" fill="#7F1D1D">ID 3</text><text x="1110" y="87" fill="#7F1D1D">ID 3</text>
+        <text x="310" y="161" fill="#1E3A8A">ID 2</text><text x="510" y="161" fill="#1E3A8A">ID 2</text><text x="710" y="161" fill="#64748B">missed</text><text x="910" y="161" fill="#1E3A8A">ID 2</text><text x="1110" y="161" fill="#1E3A8A">ID 2</text>
+        <text x="910" y="230" fill="#92400E">false box</text></g></g></svg></div>
+    <div class="g4 grow" style="gap:14px">
+      <div class="kpi"><div class="l">real appearances (GT)</div><div class="v">10</div><div class="s">2 people × 5 frames</div></div>
+      <div class="kpi"><div class="l">missed (FN)</div><div class="v bad">1</div><div class="s">B in frame 3</div></div>
+      <div class="kpi"><div class="l">false box (FP)</div><div class="v bad">1</div><div class="s">tree in frame 4</div></div>
+      <div class="kpi"><div class="l">ID switch (IDS)</div><div class="v warn">1</div><div class="s">A: ID 1 → ID 3</div></div>
+    </div>
+    <div class="tc"><span class="origin illus">illustration · made-up numbers</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Metrics MOTA">
+  <header class="s-head"><div class="kicker">Tracking metrics · 2 of 6 — MOTA</div><h2>MOTA: Overall Tracking Errors</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">What it measures</div><p>MOTA (Multiple Object Tracking Accuracy) counts <b>all tracking errors together</b> — misses, false boxes and ID switches — against the number of real objects.</p></div>
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">MOTA = 1 − ( FN + FP + IDS ) ÷ GT</div></div>
+    <div class="row grow ac" style="gap:24px">
+      <div class="card col center grow" style="gap:4px"><div class="ex-label">Our example</div><div class="xeq">1 − ( <span class="hl">1</span> + <span class="hl">1</span> + <span class="hl">1</span> ) ÷ 10</div><div class="xdown">↓</div><div class="xeq">= 1 − 0.30 = <b>0.70</b></div></div>
+      <div class="card col" style="flex:0 0 560px;gap:8px"><h3>Practical reading</h3><ul class="clean"><li>higher is better; 1.00 = no errors</li><li>one number for everything</li><li class="bad">it cannot tell <b>which</b> error happened</li></ul></div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Metrics IDF1">
+  <header class="s-head"><div class="kicker">Tracking metrics · 3 of 6 — IDF1</div><h2>IDF1: Identity Consistency</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">What it measures</div><p>IDF1 (Identity F1 score) checks <b>how much of the time each person keeps the right ID</b>. Each real person is matched to its best predicted ID over the whole video.</p></div>
+    <div class="card tc" style="padding:10px 20px"><div class="xeq">IDF1 = 2·IDTP ÷ ( 2·IDTP + IDFP + IDFN )</div></div>
+    <div class="g3 grow" style="gap:16px">
+      <div class="card col" style="gap:6px"><div class="ex-label">IDTP · correct-ID boxes</div><p>A ↔ ID 1 in 3 frames<br>B ↔ ID 2 in 4 frames</p><div class="xeq">IDTP = <b>7</b></div></div>
+      <div class="card col" style="gap:6px"><div class="ex-label">IDFP · predicted boxes not matched</div><p>10 predicted boxes − 7<br>(ID 3 twice, the false box)</p><div class="xeq">IDFP = <b>3</b></div></div>
+      <div class="card col" style="gap:6px"><div class="ex-label">IDFN · real boxes not matched</div><p>10 real appearances − 7<br>(A as ID 3 twice, B missed)</p><div class="xeq">IDFN = <b>3</b></div></div>
+    </div>
+    <div class="card sec tc" style="padding:10px 20px"><div class="xeq">IDF1 = 14 ÷ ( 14 + 3 + 3 ) = <b>0.70</b></div></div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Metrics HOTA DetA">
+  <header class="s-head"><div class="kicker">Tracking metrics · 4 of 6 — HOTA, detection part</div><h2>HOTA, Part 1: Detection Accuracy (DetA)</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">What HOTA measures</div><p>HOTA (Higher Order Tracking Accuracy) combines <b>detection</b> (DetA) and <b>association</b> (AssA). Localization accuracy (LocA) is reported beside it.</p></div>
+    <div class="card tc" style="padding:10px 20px"><div class="xeq">at one overlap level α: &nbsp; HOTA<sub>α</sub> = √( DetA<sub>α</sub> × AssA<sub>α</sub> )</div></div>
+    <div class="row grow" style="gap:22px">
+      <div class="card col" style="flex:0 0 700px;gap:8px;border-top:6px solid #2563EB"><h3>DetA · did we detect the objects?</h3>
+        <div class="xeq sm">DetA<sub>α</sub> = TP ÷ ( TP + FN + FP )</div>
+        <p>Same small example: A detected in 5 frames + B in 4 frames = <b>9 TP</b>, <b>1 FN</b> (B missed), <b>1 FP</b> (tree).</p>
+        <div class="xeq">DetA = 9 ÷ 11 ≈ <b>0.818</b></div></div>
+      <div class="col grow" style="gap:12px">
+        <div class="card"><h3>Overlap levels α</h3><p>A detection counts as TP at level α only if its overlap is at least α. HOTA repeats the calculation for <b>α = 0.05, 0.10, … 0.95</b> (19 levels) and averages.</p></div>
+        <div class="note"><span class="origin illus">illustration · made-up numbers</span> Here we assume every matched box overlaps well enough at all levels.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Metrics HOTA AssA">
+  <header class="s-head"><div class="kicker">Tracking metrics · 5 of 6 — HOTA, association part</div><h2>HOTA, Part 2: Association Accuracy (AssA)</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">How AssA works</div><p>For <b>every true-positive box</b>, ask how well its real ID and its predicted ID stay together over the whole video: <b>A = TPA ÷ (TPA + FNA + FPA)</b>. AssA is the average over all TP boxes.</p></div>
+    <table class="tbl" style="font-size:25px">
+      <tr><th style="text-align:left">TP boxes</th><th>TPA · same pair</th><th>FNA · real ID elsewhere</th><th>FPA · predicted ID elsewhere</th><th>A per box</th><th>boxes</th></tr>
+      <tr><td>A with ID 1</td><td>3</td><td>2 (A as ID 3)</td><td>0</td><td class="strong">3 ÷ 5 = 0.60</td><td>3</td></tr>
+      <tr><td>A with ID 3</td><td>2</td><td>3 (A as ID 1)</td><td>0</td><td class="strong">2 ÷ 5 = 0.40</td><td>2</td></tr>
+      <tr><td>B with ID 2</td><td>4</td><td>1 (B missed)</td><td>0</td><td class="strong">4 ÷ 5 = 0.80</td><td>4</td></tr>
+    </table>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card sec tc col center" style="gap:4px"><div class="xeq sm">AssA = (3×0.60 + 2×0.40 + 4×0.80) ÷ 9</div><div class="xeq">= 5.8 ÷ 9 ≈ <b>0.644</b></div></div>
+      <div class="card sec tc col center" style="gap:4px"><div class="xeq sm">HOTA<sub>α</sub> = √( 0.818 × 0.644 )</div><div class="xeq">≈ <b>0.726</b></div><p class="small">averaged over the 19 α levels (same here by assumption)</p></div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="Metrics IDS">
+  <header class="s-head"><div class="kicker">Tracking metrics · 6 of 6 — IDS</div><h2>IDS: Counting Identity Switches</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">What it measures</div><p>IDS (identity switches) = <b>how many times a real object suddenly gets a different ID</b>. Lower is better.</p></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:8px;border-top:6px solid var(--bad)"><h3>Person A → 1 switch</h3><div class="xchain" style="justify-content:flex-start"><span class="pill good">ID 1</span><span class="pill good">ID 1</span><span class="pill good">ID 1</span><span>→</span><span class="pill bad">ID 3</span><span class="pill bad">ID 3</span></div><p>The ID changes once, at frame 4 → <b>IDS = 1</b>.</p></div>
+      <div class="card col" style="gap:8px;border-top:6px solid var(--good)"><h3>Person B → 0 switches</h3><div class="xchain" style="justify-content:flex-start"><span class="pill sec">ID 2</span><span class="pill sec">ID 2</span><span class="pill">missed</span><span class="pill sec">ID 2</span><span class="pill sec">ID 2</span></div><p>B is missed once (that is an <b>FN</b>), but comes back with the <b>same ID</b> → no switch.</p></div>
+    </div>
+    <div class="callout"><b>In this example:</b> MOTA 0.70 (all errors) · IDF1 0.70 (identity) · IDS 1 (switch count) — each metric looks at a different part of the same tracking result.</div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-v1v2" data-label="V1 vs V2">
+<section class="xpage" data-sec="7" data-title="V1 vs V2 test">
+  <header class="s-head"><div class="kicker">V1 vs V2 · 1 of 3 — test set</div><h2>V1 vs V2 on the Test Set</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">The main idea</div><p><b>V1</b> wins the <b>quality</b> metrics; <b>V2</b> wins <b>identity switches and speed</b>. Neither wins everything.</p></div>
+    <table class="tbl" style="font-size:30px"><tr><th style="text-align:left">Metric</th><th>V1</th><th>V2</th><th style="text-align:left">Better here</th></tr><tr><td>MOTA ↑</td><td class="best" data-bind="testdev.rows.2.mota" data-dec="3">…</td><td class="" data-bind="testdev.rows.3.mota" data-dec="3">…</td><td style="text-align:left" class="strong">V1</td></tr><tr><td>HOTA ↑</td><td class="best" data-bind="testdev.rows.2.hota" data-dec="3">…</td><td class="" data-bind="testdev.rows.3.hota" data-dec="3">…</td><td style="text-align:left" class="strong">V1</td></tr><tr><td>IDF1 ↑</td><td class="best" data-bind="testdev.rows.2.idf1" data-dec="3">…</td><td class="" data-bind="testdev.rows.3.idf1" data-dec="3">…</td><td style="text-align:left" class="strong">V1</td></tr><tr><td>IDS ↓</td><td class="" data-bind="testdev.rows.2.ids">…</td><td class="best" data-bind="testdev.rows.3.ids">…</td><td style="text-align:left" class="strong">V2</td></tr><tr><td>FPS ↑</td><td class="" data-bind="testdev.rows.2.fps" data-dec="3">…</td><td class="best" data-bind="testdev.rows.3.fps" data-dec="3">…</td><td style="text-align:left" class="strong">V2</td></tr></table>
+    <div class="tc"><span class="origin optuna">frozen systems</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="V1 vs V2 UAVDT">
+  <header class="s-head"><div class="kicker">V1 vs V2 · 2 of 3 — UAVDT</div><h2>The Same Pattern on UAVDT</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">The main idea</div><p>On a different drone dataset the trade-off <b>repeats</b>: V1 has higher quality, V2 has fewer ID switches and more speed than V1.</p></div>
+    <table class="tbl" style="font-size:30px"><tr><th style="text-align:left">Metric</th><th>V1</th><th>V2</th><th style="text-align:left">Better here</th></tr><tr><td>MOTA ↑</td><td class="best" data-bind="uavdt.rows.1.mota" data-dec="3">…</td><td class="" data-bind="uavdt.rows.2.mota" data-dec="3">…</td><td style="text-align:left" class="strong">V1</td></tr><tr><td>HOTA ↑</td><td class="best" data-bind="uavdt.rows.1.hota" data-dec="3">…</td><td class="" data-bind="uavdt.rows.2.hota" data-dec="3">…</td><td style="text-align:left" class="strong">V1</td></tr><tr><td>IDF1 ↑</td><td class="best" data-bind="uavdt.rows.1.idf1" data-dec="3">…</td><td class="" data-bind="uavdt.rows.2.idf1" data-dec="3">…</td><td style="text-align:left" class="strong">V1</td></tr><tr><td>IDS ↓</td><td class="" data-bind="uavdt.rows.1.ids">…</td><td class="best" data-bind="uavdt.rows.2.ids">…</td><td style="text-align:left" class="strong">V2</td></tr><tr><td>FPS ↑</td><td class="" data-bind="uavdt.rows.1.fps" data-dec="3">…</td><td class="best" data-bind="uavdt.rows.2.fps" data-dec="3">…</td><td style="text-align:left" class="strong">V2</td></tr></table>
+    <div class="tc"><span class="origin optuna">frozen systems · no tuning</span></div>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="V1 vs V2 choose">
+  <header class="s-head"><div class="kicker">V1 vs V2 · 3 of 3 — how to choose</div><h2>Two Operating Points, Not a Winner and a Loser</h2></header>
+  <div class="s-body col">
+
+    <div class="g2 grow" style="gap:24px">
+      <div class="card col" style="gap:10px;border-top:8px solid #7C3AED"><h3 style="color:#6D28D9;font-size:34px">V1 · quality-oriented</h3>
+        <ul class="clean"><li>highest MOTA, HOTA, IDF1</li><li>more ID switches than V2</li><li>pick it when <b>finding and tracking as much as possible</b> matters most</li></ul></div>
+      <div class="card col" style="gap:10px;border-top:8px solid #0D9488"><h3 style="color:#0F766E;font-size:34px">V2 · identity / efficiency</h3>
+        <ul class="clean"><li>fewest ID switches, fastest</li><li>lower quality metrics than V1</li><li>pick it when <b>stable IDs and speed</b> matter most</li></ul></div>
+    </div>
+    <div class="xchain"><span class="pill sec" style="font-size:26px">V1 = one objective + rules</span><span>vs</span><span class="pill sec" style="font-size:26px">V2 = maximize MOTA and minimize IDS, with an FPS constraint</span></div>
+    <div class="callout warn"><b>V2 is not universally better than V1</b> — and V1 is not best on every metric. They are different points on the quality / identity / efficiency trade-off.</div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-iou" data-label="IoU and NMS">
+<section class="xpage" data-sec="1" data-title="IoU computed">
+  <header class="s-head"><div class="kicker">IoU and NMS · 1 of 3 — computing IoU</div><h2>IoU From Box Corners, Step by Step</h2></header>
+  <div class="s-body col">
+
+    <div class="row grow" style="gap:24px">
+      <div class="card col" style="flex:0 0 620px;gap:6px"><div class="ex-label">Two boxes (pixels) <span class="origin illus">illustration · made-up numbers</span></div>
+        <svg viewBox="0 0 560 360" width="100%" height="330"><g font-family="Inter,Helvetica" font-weight="800">
+          <rect x="60" y="60" width="240" height="180" fill="#DCFCE7" stroke="#16A34A" stroke-width="5"/>
+          <rect x="156" y="96" width="240" height="180" fill="none" stroke="#DC2626" stroke-width="5"/>
+          <rect x="156" y="96" width="144" height="144" fill="#4F46E5" fill-opacity=".35"/>
+          <text x="60" y="48" font-size="22" fill="#15803D">real box: (100,100) → (300,250)</text>
+          <text x="156" y="310" font-size="22" fill="#B91C1C">detector box: (180,130) → (380,280)</text>
+          <text x="228" y="176" font-size="22" fill="#312E81" text-anchor="middle">overlap</text></g></svg></div>
+      <div class="col grow" style="gap:10px">
+        <table class="tbl" style="font-size:26px">
+          <tr><td>1 · area of the real box</td><td class="fcell">200 × 150 = 30,000</td></tr>
+          <tr><td>2 · area of the detector box</td><td class="fcell">200 × 150 = 30,000</td></tr>
+          <tr><td>3 · overlap width</td><td class="fcell">min(300,380) − max(100,180) = 120</td></tr>
+          <tr><td>4 · overlap height</td><td class="fcell">min(250,280) − max(100,130) = 120</td></tr>
+          <tr><td>5 · overlap area</td><td class="fcell">120 × 120 = 14,400</td></tr>
+          <tr><td>6 · union</td><td class="fcell">30,000 + 30,000 − 14,400 = 45,600</td></tr>
+        </table>
+        <div class="card sec tc" style="padding:10px"><div class="xeq">IoU = 14,400 ÷ 45,600 ≈ <b>0.32</b></div></div>
+        <div class="note">If the overlap width or height is 0 or negative, the boxes do not touch and IoU = 0.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="IoU uses">
+  <header class="s-head"><div class="kicker">IoU and NMS · 2 of 3 — where IoU is used</div><h2>When Is a Box Correct? Three Uses of IoU</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">The main idea</div><p>The same overlap number is used in <b>three different places</b>, each with its own threshold.</p></div>
+    <div class="g3 grow" style="gap:18px">
+      <div class="card col" style="gap:8px;border-top:6px solid #16A34A"><h3>1 · Evaluation</h3><p>A detector box counts as a <b>true positive</b> when IoU with a real object is <b>≥ 0.5</b>. Otherwise the box is a false positive and the object may be a false negative.</p><div class="xeq sm">IoU 0.32 → not a match</div></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #4F46E5"><h3>2 · Detector NMS</h3><p>Inside one frame, a box that overlaps a <b>higher-score</b> box more than the NMS IoU threshold is <b>deleted</b> as a duplicate.</p><div class="xeq sm">AC-MOT: 0.40 … 0.52</div></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #64748B"><h3>3 · Tracker association</h3><p>Between frames, ByteTrack compares predicted track boxes with new boxes using an <b>IoU-based distance</b> (1 − IoU) and its match threshold.</p><div class="xeq sm">match_thresh = 0.86</div></div>
+    </div>
+    <div class="callout warn">Same measurement, three different jobs: <b>judge</b> a box · <b>remove</b> duplicates · <b>link</b> boxes over time.</div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="NMS algorithm">
+  <header class="s-head"><div class="kicker">IoU and NMS · 3 of 3 — the NMS algorithm</div><h2>NMS Step by Step</h2></header>
+  <div class="s-body col">
+
+    <div class="row grow" style="gap:24px">
+      <div class="col" style="flex:0 0 640px;gap:10px">
+        <div class="ex-label">Four boxes, NMS IoU threshold = 0.45 <span class="origin illus">illustration · made-up numbers</span></div>
+        <table class="tbl" style="font-size:26px">
+          <tr><th style="text-align:left">Box</th><th>Score</th><th style="text-align:left">Overlap with …</th></tr>
+          <tr><td>A</td><td>0.92</td><td style="text-align:left">B: 0.70 · C: 0.10 · D: 0.05</td></tr>
+          <tr><td>B</td><td>0.85</td><td style="text-align:left">A: 0.70</td></tr>
+          <tr><td>C</td><td>0.60</td><td style="text-align:left">D: 0.62</td></tr>
+          <tr><td>D</td><td>0.55</td><td style="text-align:left">C: 0.62</td></tr>
+        </table>
+        <div class="note">Boxes are first sorted by score, highest first.</div>
+      </div>
+      <div class="col grow" style="gap:8px">
+        <div class="card flat" style="padding:10px 16px"><p><b>1.</b> Take the best box <b>A (0.92)</b> → keep it.</p></div>
+        <div class="card flat" style="padding:10px 16px"><p><b>2.</b> Delete boxes that overlap A above 0.45 → <b class="bad">B is deleted</b> (0.70). C and D stay.</p></div>
+        <div class="card flat" style="padding:10px 16px"><p><b>3.</b> Take the best remaining box <b>C (0.60)</b> → keep it.</p></div>
+        <div class="card flat" style="padding:10px 16px"><p><b>4.</b> Delete boxes that overlap C above 0.45 → <b class="bad">D is deleted</b> (0.62).</p></div>
+        <div class="card sec tc" style="padding:10px"><div class="xeq">kept: <b>A and C</b> → two objects</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-ap" data-label="Precision, recall and AP">
+<section class="xpage" data-sec="1" data-title="PR table">
+  <header class="s-head"><div class="kicker">Precision, recall and AP · 1 of 3</div><h2>Building the Precision–Recall Table</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">How it works</div><p>Sort all detections of one class by score. Go down the list and, after each box, recompute <b>precision</b> and <b>recall</b>. <span class="origin illus">illustration · made-up numbers</span></p></div>
+    <div class="row grow" style="gap:22px">
+      <table class="tbl" style="font-size:25px;flex:1.4">
+        <tr><th>Rank</th><th>Score</th><th style="text-align:left">Result</th><th>TP so far</th><th>FP so far</th><th>Precision</th><th>Recall</th></tr>
+        <tr><td>1</td><td>0.95</td><td style="text-align:left" class="good strong">TP</td><td>1</td><td>0</td><td>1 ÷ 1 = 1.00</td><td>1 ÷ 5 = 0.20</td></tr>
+        <tr><td>2</td><td>0.90</td><td style="text-align:left" class="good strong">TP</td><td>2</td><td>0</td><td>2 ÷ 2 = 1.00</td><td>2 ÷ 5 = 0.40</td></tr>
+        <tr><td>3</td><td>0.80</td><td style="text-align:left" class="bad strong">FP</td><td>2</td><td>1</td><td>2 ÷ 3 = 0.67</td><td>0.40</td></tr>
+        <tr><td>4</td><td>0.70</td><td style="text-align:left" class="good strong">TP</td><td>3</td><td>1</td><td>3 ÷ 4 = 0.75</td><td>3 ÷ 5 = 0.60</td></tr>
+        <tr><td>5</td><td>0.60</td><td style="text-align:left" class="bad strong">FP</td><td>3</td><td>2</td><td>3 ÷ 5 = 0.60</td><td>0.60</td></tr>
+        <tr><td>6</td><td>0.50</td><td style="text-align:left" class="good strong">TP</td><td>4</td><td>2</td><td>4 ÷ 6 = 0.67</td><td>4 ÷ 5 = 0.80</td></tr>
+      </table>
+      <div class="col" style="flex:0 0 380px;gap:12px">
+        <div class="card sec"><h3>Setup</h3><p><b>5</b> real objects. 6 detections. A detection is TP when IoU ≥ 0.5 with an unmatched real object.</p></div>
+        <div class="note">One real object is never found, so recall stops at 0.80.</div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="AP area">
+  <header class="s-head"><div class="kicker">Precision, recall and AP · 2 of 3</div><h2>AP = Area Under the Precision–Recall Curve</h2></header>
+  <div class="s-body col">
+
+    <div class="row grow" style="gap:24px">
+      <div class="card" style="flex:0 0 640px;padding:10px 14px">
+        <svg viewBox="0 0 600 440" width="100%" height="420"><g font-family="Inter,Helvetica" font-weight="800">
+          <line x1="70" y1="380" x2="570" y2="380" stroke="#94A3B8" stroke-width="2"/><line x1="70" y1="380" x2="70" y2="30" stroke="#94A3B8" stroke-width="2"/>
+          <path d="M70 60 H270 V140 H370 V167 H470 V380 H70 Z" fill="#DBEAFE"/>
+          <path d="M70 60 H270 V140 H370 V167 H470 V380" fill="none" stroke="#2563EB" stroke-width="5"/>
+          <g fill="#0F1B33"><circle cx="170" cy="60" r="7"/><circle cx="270" cy="60" r="7"/><circle cx="270" cy="167" r="7"/><circle cx="370" cy="140" r="7"/><circle cx="370" cy="188" r="7"/><circle cx="470" cy="167" r="7"/></g>
+          <g font-size="20" fill="#64748B" text-anchor="middle"><text x="70" y="406">0</text><text x="170" y="406">0.2</text><text x="270" y="406">0.4</text><text x="370" y="406">0.6</text><text x="470" y="406">0.8</text><text x="570" y="406">1.0</text></g>
+          <g font-size="20" fill="#64748B" text-anchor="end"><text x="60" y="66">1.00</text><text x="60" y="146">0.75</text><text x="60" y="173">0.67</text><text x="60" y="386">0</text></g>
+          <text x="320" y="436" font-size="22" fill="#475569" text-anchor="middle">Recall →</text>
+          <text x="260" y="290" font-size="40" fill="#1D4ED8" text-anchor="middle">AP</text></g></svg></div>
+      <div class="col grow" style="gap:10px">
+        <div class="card"><h3>Interpolation</h3><p>At each recall level, use the <b>best precision reached at that recall or higher</b>. This removes the zig-zag.</p></div>
+        <table class="tbl" style="font-size:25px">
+          <tr><th style="text-align:left">Recall range</th><th>Precision</th><th>Area</th></tr>
+          <tr><td>0 → 0.4</td><td>1.00</td><td class="fcell">0.4 × 1.00 = 0.400</td></tr>
+          <tr><td>0.4 → 0.6</td><td>0.75</td><td class="fcell">0.2 × 0.75 = 0.150</td></tr>
+          <tr><td>0.6 → 0.8</td><td>0.67</td><td class="fcell">0.2 × 0.667 = 0.133</td></tr>
+          <tr><td>0.8 → 1.0</td><td>0</td><td class="fcell">never reached = 0</td></tr>
+        </table>
+        <div class="card sec tc" style="padding:10px"><div class="xeq">AP ≈ 0.400 + 0.150 + 0.133 = <b>0.683</b></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="mAP and COCO">
+  <header class="s-head"><div class="kicker">Precision, recall and AP · 3 of 3</div><h2>From AP to mAP — and the COCO Version</h2></header>
+  <div class="s-body col">
+
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:10px;border-top:6px solid #2563EB"><h3>mAP · mean over classes</h3>
+        <div class="xeq sm">mAP = (AP<sub>car</sub> + AP<sub>person</sub> + …) ÷ number of classes</div>
+        <p>Example: AP 0.90 (car), 0.80 (person) → mAP = <b>0.85</b>.</p></div>
+      <div class="card col" style="gap:10px;border-top:6px solid #7C3AED"><h3>COCO mAP (mAP 50–95) <span class="origin empirical">standard definition</span></h3>
+        <ul class="clean"><li>AP is computed at <b>10 IoU thresholds</b>: 0.50, 0.55, … 0.95</li><li>each AP uses <b>101 recall points</b></li><li>the final number averages over IoU thresholds <b>and</b> classes</li></ul>
+        <p>So a high COCO mAP needs boxes that are <b>both found and tightly placed</b>.</p></div>
+    </div>
+    <div class="callout">The detector table in this talk (for example YOLOv8n <b>37.3</b>) reports this COCO-style mAP. It judges the <b>detector only</b> — nothing about tracking IDs.</div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-fps" data-label="Speed">
+<section class="xpage" data-sec="1" data-title="FPS budget">
+  <header class="s-head"><div class="kicker">Speed · 1 of 2 — FPS</div><h2>FPS and the Real-Time Budget</h2></header>
+  <div class="s-body col">
+
+    <div class="card tc" style="padding:12px 20px"><div class="xeq">FPS = frames processed ÷ seconds &nbsp; · &nbsp; time per frame = 1000 ms ÷ FPS</div></div>
+    <table class="tbl" style="font-size:28px">
+      <tr><th style="text-align:left">FPS</th><th>Time per frame</th><th style="text-align:left">Meaning for live video</th></tr>
+      <tr><td>50</td><td>20 ms</td><td style="text-align:left" class="good">plenty of spare time</td></tr>
+      <tr><td>30</td><td>33 ms</td><td style="text-align:left" class="good">keeps up with a 30 FPS camera</td></tr>
+      <tr class="sel"><td>25</td><td>40 ms</td><td style="text-align:left"><b>our real-time rule</b> (hard limit in the search)</td></tr>
+      <tr><td>20</td><td>50 ms</td><td style="text-align:left" class="bad">slower than the video — frames pile up</td></tr>
+    </table>
+    <div class="callout">Every part of the pipeline has to fit inside the time budget of one frame.</div>
+  </div>
+</section>
+<section class="xpage" data-sec="1" data-title="FPS where time goes">
+  <header class="s-head"><div class="kicker">Speed · 2 of 2 — where the time goes</div><h2>Where the Time Goes in AC-MOT</h2></header>
+  <div class="s-body col">
+
+    <div class="xsteps col grow" style="gap:4px">
+      <div class="node fx">every frame · <b>detector</b> (YOLOv8n) — the largest cost; grows with input size (640 → 736 → 832)</div><div class="xdown">+</div>
+      <div class="node fx">every frame · <b>tracker</b> (ByteTrack) — prediction and matching</div><div class="xdown">+</div>
+      <div class="node ad">every 10th frame · <b>Scene Analyzer</b> on a small gray copy — under 0.2 ms in development timing</div><div class="xdown">=</div>
+      <div class="node good">time per frame → FPS</div>
+    </div>
+    <div class="g2" style="gap:18px">
+      <div class="card" style="border-left:6px solid var(--bad)"><h3>Why AC-MOT can be slower</h3><p>Hard scenes can use a <b>bigger input</b>, which gives the detector more pixels to process.</p></div>
+      <div class="card" style="border-left:6px solid var(--good)"><h3>Why it can be faster</h3><p>Settings that keep fewer boxes give the detector’s cleanup and the tracker <b>less work</b>.</p></div>
+    </div>
+    <p class="tc small muted">FPS therefore depends on how many frames fall into each regime in a video.</p>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-bench" data-label="Detector benchmark">
+<section class="xpage" data-sec="2" data-title="Benchmark columns">
+  <header class="s-head"><div class="kicker">Detector benchmark · reading the table</div><h2>How to Read the Detector Benchmark</h2></header>
+  <div class="s-body col">
+
+    <table class="tbl" style="font-size:27px">
+      <tr><th style="text-align:left">Column</th><th style="text-align:left">What it means</th><th style="text-align:left">Example · YOLOv8n</th></tr>
+      <tr><td class="strong">mAP</td><td style="text-align:left">COCO mAP 50–95 on COCO val2017 — accuracy of the boxes</td><td style="text-align:left">37.3</td></tr>
+      <tr><td class="strong">Speed</td><td style="text-align:left">milliseconds for one image</td><td style="text-align:left">3.2 ms</td></tr>
+      <tr><td class="strong">FPS</td><td style="text-align:left">1000 ÷ milliseconds — detector alone</td><td style="text-align:left">1000 ÷ 3.2 ≈ 312</td></tr>
+      <tr><td class="strong">Size</td><td style="text-align:left">number of learned parameters (millions)</td><td style="text-align:left">3.2 M</td></tr>
+    </table>
+    <div class="g2 grow" style="gap:20px">
+      <div class="card sec"><h3>Same test conditions</h3><ul class="clean"><li>T4 GPU</li><li>TensorRT with FP16 (16-bit numbers, faster)</li><li>640 × 640 input, batch size 1</li></ul></div>
+      <div class="card"><h3>Why it matters here</h3><p>Only rows measured under the <b>same conditions</b> can be compared. The detector-only FPS is much higher than the full tracking system, which also runs the tracker and scene analysis.</p></div>
+    </div>
+    <div class="tc"><span class="origin empirical">published values · IEEE ICMISI 2026 survey</span></div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-bytetrack" data-label="ByteTrack in depth">
+<section class="xpage" data-sec="2" data-title="ByteTrack predict">
+  <header class="s-head"><div class="kicker">ByteTrack in depth · 1 of 4 — prediction</div><h2>Step 1: Predict Where Each Track Moved</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">Kalman filter, simply</div><p>Each track remembers its box and its <b>velocity</b>. Before looking at the new frame, a <b>Kalman filter</b> predicts where the box should be now.</p></div>
+    <div class="row grow" style="gap:24px">
+      <div class="card" style="flex:0 0 700px;padding:10px 14px">
+        <svg viewBox="0 0 640 300" width="100%" height="290"><g font-family="Inter,Helvetica" font-weight="800">
+          <rect x="40" y="110" width="110" height="80" fill="none" stroke="#94A3B8" stroke-width="4" stroke-dasharray="8 6"/><text x="40" y="96" font-size="20" fill="#64748B">frame t−2</text>
+          <rect x="190" y="100" width="110" height="80" fill="none" stroke="#64748B" stroke-width="4" stroke-dasharray="8 6"/><text x="190" y="86" font-size="20" fill="#475569">frame t−1</text>
+          <rect x="340" y="90" width="110" height="80" fill="#EEF2FF" stroke="#4F46E5" stroke-width="5"/><text x="340" y="76" font-size="20" fill="#3730A3">predicted for t</text>
+          <rect x="352" y="100" width="110" height="80" fill="none" stroke="#16A34A" stroke-width="5"/><text x="352" y="215" font-size="20" fill="#15803D">new detection at t</text>
+          <path d="M150 150 H186 M300 140 H336" stroke="#0F1B33" stroke-width="4"/></g></svg></div>
+      <div class="col grow" style="gap:12px">
+        <div class="card"><h3>What is predicted</h3><p>Box centre, aspect ratio and height, plus how fast each one changes (a constant-velocity model).</p></div>
+        <div class="card"><h3>Why it helps</h3><p>Comparing the new detection with the <b>predicted</b> box, not the old one, gives a much better overlap when objects move.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="2" data-title="ByteTrack two rounds">
+  <header class="s-head"><div class="kicker">ByteTrack in depth · 2 of 4 — matching</div><h2>Step 2: Two Rounds of Matching</h2></header>
+  <div class="s-body col">
+
+    <div class="card tc" style="padding:10px 20px"><div class="xeq">distance = 1 − IoU(predicted track box, detection) &nbsp;→ optimal one-to-one assignment</div></div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:8px;border-top:6px solid #16A34A"><h3>Round 1 · high-score detections</h3>
+        <p>Detections with score ≥ <b>track_high_thresh</b> are matched to <b>all</b> tracks first.</p>
+        <p>A pair is accepted only if its distance is inside the <b>match threshold</b>.</p>
+        <div class="card flat" style="padding:8px 12px"><p>Result: most tracks get their box. Some tracks stay unmatched.</p></div></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #F59E0B"><h3>Round 2 · low-score detections</h3>
+        <p>Detections with score between <b>track_low_thresh</b> and <b>track_high_thresh</b> are matched to the tracks <b>still unmatched</b>.</p>
+        <p>These weak boxes are often <b>half-hidden or blurred</b> objects — this round keeps their IDs alive.</p>
+        <div class="card flat" style="padding:8px 12px"><p>Weak boxes that match no track are thrown away (they never start new tracks).</p></div></div>
+    </div>
+    <div class="note">Detail: in the Ultralytics ByteTrack implementation the distance can also be combined with the detection score; the idea stays the same.</div>
+  </div>
+</section>
+<section class="xpage" data-sec="2" data-title="ByteTrack lifecycle">
+  <header class="s-head"><div class="kicker">ByteTrack in depth · 3 of 4 — track life</div><h2>Step 3: Starting, Keeping and Ending Tracks</h2></header>
+  <div class="s-body col">
+
+    <div class="flow grow" style="align-items:stretch;gap:0">
+      <div class="card col" style="width:330px;gap:6px;border-top:6px solid #16A34A"><h3>New</h3><p>An unmatched <b>high-score</b> detection with score ≥ <b>new_track_thresh</b> starts a new track with a new ID.</p></div><div class="arr" style="align-self:center"></div>
+      <div class="card col" style="width:330px;gap:6px;border-top:6px solid #2563EB"><h3>Tracked</h3><p>Matched in a frame → the box and velocity are updated and the ID continues.</p></div><div class="arr" style="align-self:center"></div>
+      <div class="card col" style="width:330px;gap:6px;border-top:6px solid #F59E0B"><h3>Lost</h3><p>Not matched → kept in memory and still predicted, so it can be <b>re-found with the same ID</b>.</p></div><div class="arr" style="align-self:center"></div>
+      <div class="card col" style="width:330px;gap:6px;border-top:6px solid #DC2626"><h3>Removed</h3><p>Lost for longer than about <b>track_buffer</b> frames (scaled to the video frame rate) → deleted.</p></div>
+    </div>
+    <div class="callout">A <b>longer track_buffer</b> lets a hidden object come back with its old ID, but keeps dead tracks around longer.</div>
+  </div>
+</section>
+<section class="xpage" data-sec="2" data-title="ByteTrack settings">
+  <header class="s-head"><div class="kicker">ByteTrack in depth · 4 of 4 — our settings</div><h2>Every ByteTrack Setting We Use</h2></header>
+  <div class="s-body col">
+
+    <table class="tbl" style="font-size:25px">
+      <tr><th style="text-align:left">Setting</th><th style="text-align:left">What it controls</th><th>Default</th><th>Tuned (AC-MOT)</th></tr>
+      <tr><td class="strong">track_high_thresh</td><td style="text-align:left">minimum score for round 1 (high-score detections)</td><td>0.25</td><td class="best">0.18</td></tr>
+      <tr><td class="strong">track_low_thresh</td><td style="text-align:left">lowest score still used in round 2</td><td>0.10</td><td class="best">0.04</td></tr>
+      <tr><td class="strong">new_track_thresh</td><td style="text-align:left">minimum score to start a new track</td><td>0.25</td><td class="best">0.20</td></tr>
+      <tr><td class="strong">track_buffer</td><td style="text-align:left">how long a lost track is kept (frames)</td><td>30</td><td class="best">45</td></tr>
+      <tr><td class="strong">match_thresh</td><td style="text-align:left">how far apart a track and a box may be and still match</td><td>0.80</td><td class="best">0.86</td></tr>
+    </table>
+    <div class="g2 grow" style="gap:20px">
+      <div class="card sec"><h3>Direction of the tuning</h3><ul class="clean"><li>lower score limits → weaker boxes still help tracks</li><li>longer buffer → hidden objects keep their ID longer</li><li>larger match threshold → matches with less overlap are accepted</li></ul></div>
+      <div class="card"><h3>Status</h3><p>Tuned once, then <b>frozen</b>. AC-MOT never changes these per frame — it only changes the <b>detector</b> settings.</p><div class="mt8"><span class="origin manual">tuned once · then frozen</span></div></div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-eval" data-label="Evaluation in depth">
+<section class="xpage" data-sec="5" data-title="Eval filtering">
+  <header class="s-head"><div class="kicker">Evaluation in depth · 1 of 3 — ground truth</div><h2>Step 1: Which Real Objects Are Counted</h2></header>
+  <div class="s-body col">
+
+    <table class="tbl" style="font-size:26px">
+      <tr><th style="text-align:left">Rule</th><th style="text-align:left">Kept</th><th style="text-align:left">Removed · example</th></tr>
+      <tr><td class="strong">class</td><td style="text-align:left">pedestrian, car, van, truck, bus (IDs 1, 4, 5, 6, 9)</td><td style="text-align:left">a bicycle at 100 m</td></tr>
+      <tr><td class="strong">occlusion</td><td style="text-align:left">0 (visible) or 1 (slightly hidden)</td><td style="text-align:left">2–3: a person behind a bus</td></tr>
+      <tr><td class="strong">truncation</td><td style="text-align:left">0 or 1 (a small part outside the image)</td><td style="text-align:left">2–3: a car mostly outside the frame</td></tr>
+      <tr><td class="strong">annotation score</td><td style="text-align:left">1</td><td style="text-align:left">0 = an “ignore” region</td></tr>
+    </table>
+    <div class="g2 grow" style="gap:20px">
+      <div class="card sec"><h3>Class-agnostic</h3><p>All kept classes are <b>merged into one class</b>: a van detected as “car” still counts as found.</p></div>
+      <div class="card"><h3>Same for every system</h3><p>The filter is applied once to the ground truth and used by every system, so comparisons stay fair.</p></div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="5" data-title="Eval matching">
+  <header class="s-head"><div class="kicker">Evaluation in depth · 2 of 3 — matching</div><h2>Step 2: Matching Boxes in Every Frame</h2></header>
+  <div class="s-body col">
+
+    <div class="xsteps col grow" style="gap:4px">
+      <div class="node">for each frame: compute IoU between every tracker box and every real object</div><div class="xdown">↓</div>
+      <div class="node">pairs with IoU ≥ 0.5 may match · one real object ↔ at most one tracker box</div><div class="xdown">↓</div>
+      <div class="node">matched pairs → <b>TP</b> · unmatched tracker boxes → <b>FP</b> · unmatched real objects → <b>FN</b></div><div class="xdown">↓</div>
+      <div class="node">if a real object is now matched to a <b>different track ID</b> than before → <b>IDS + 1</b></div><div class="xdown">↓</div>
+      <div class="node good">add up over all frames and all sequences → MOTA, IDF1, HOTA</div>
+    </div>
+    <div class="note">TrackEval prefers to keep the previous frame’s match when it is still valid, so an ID is not switched just because another pairing is slightly better. IDF1 and HOTA use their own global matching (previous explanation).</div>
+  </div>
+</section>
+<section class="xpage" data-sec="5" data-title="Eval reset totals">
+  <header class="s-head"><div class="kicker">Evaluation in depth · 3 of 3 — reset and totals</div><h2>Step 3: Reset, Run, Add Up</h2></header>
+  <div class="s-body col">
+
+    <div class="g3 grow" style="gap:18px">
+      <div class="card col" style="gap:8px;border-top:6px solid #4F46E5"><h3>1 · Reset per video</h3><p>The tracker starts with <b>no tracks and ID 1</b>. Without a reset, tracks from one video could match objects in the next.</p></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #0D9488"><h3>2 · Run and time</h3><p>The system processes every frame. FPS = frames processed ÷ processing time, on the same GPU for every system.</p></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #16A34A"><h3>3 · One total</h3><p>TrackEval (pinned to one exact version) combines all sequences into <b>one</b> MOTA, IDF1, HOTA and IDS per system.</p></div>
+    </div>
+    <div class="callout warn">These scores follow <b>our AC-MOT protocol</b> (class-agnostic, filtered ground truth). They are fair between our systems but are <b>not</b> official leaderboard results.</div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-ablation" data-label="Ablation in depth">
+<section class="xpage" data-sec="6" data-title="Ablation stages">
+  <header class="s-head"><div class="kicker">Ablation in depth · 1 of 3 — the stages</div><h2>What Each Ablation Stage Switches On</h2></header>
+  <div class="s-body col">
+
+    <table class="tbl" style="font-size:27px">
+      <tr><th style="text-align:left">Stage</th><th style="text-align:left">What is switched on</th><th style="text-align:left">What it can change</th></tr>
+      <tr><td class="strong">OLD-A0</td><td style="text-align:left">baseline: default settings</td><td style="text-align:left">reference point</td></tr>
+      <tr><td class="strong">OLD-A1</td><td style="text-align:left">tuned ByteTrack settings</td><td style="text-align:left">association: how tracks and boxes are linked</td></tr>
+      <tr><td class="strong">OLD-A2</td><td style="text-align:left">adaptive confidence + NMS (from SCI)</td><td style="text-align:left">which boxes reach the tracker</td></tr>
+      <tr><td class="strong">OLD-A2R</td><td style="text-align:left">adaptive resolution only</td><td style="text-align:left">how much image detail the detector sees</td></tr>
+      <tr><td class="strong">OLD-A3</td><td style="text-align:left">full AC-MOT</td><td style="text-align:left">all adaptive parts together</td></tr>
+    </table>
+    <div class="callout good">Every stage uses the <b>same YOLOv8n detector</b> without retraining. Only the listed part changes.</div>
+  </div>
+</section>
+<section class="xpage" data-sec="6" data-title="Ablation per metric">
+  <header class="s-head"><div class="kicker">Ablation in depth · 2 of 3 — metric by metric</div><h2>Reading the Ablation Metric by Metric</h2></header>
+  <div class="s-body col">
+
+    <table class="tbl" style="font-size:27px">
+      <tr><th style="text-align:left">Metric</th><th style="text-align:left">Best stage</th><th>Value</th><th style="text-align:left">Baseline (A0)</th></tr>
+      <tr><td>MOTA ↑</td><td style="text-align:left" class="strong">OLD-A2R · adaptive resolution only</td><td class="best">18.425</td><td style="text-align:left">17.633</td></tr>
+      <tr><td>HOTA ↑</td><td style="text-align:left" class="strong">OLD-A3 · full AC-MOT</td><td class="best">33.064</td><td style="text-align:left">29.837</td></tr>
+      <tr><td>IDF1 ↑</td><td style="text-align:left" class="strong">OLD-A3 · full AC-MOT</td><td class="best">36.296</td><td style="text-align:left">30.892</td></tr>
+      <tr><td>IDS ↓</td><td style="text-align:left" class="strong">OLD-A2 · adaptive confidence + NMS</td><td class="best">210</td><td style="text-align:left">283</td></tr>
+      <tr><td>FPS ↑</td><td style="text-align:left" class="strong">OLD-A1 · tuned ByteTrack</td><td class="best">44.51</td><td style="text-align:left">44.09</td></tr>
+    </table>
+    <div class="callout">Four different stages win the five metrics. That is why the result is read <b>metric by metric</b>, not as one overall winner.</div>
+    <div class="tc"></div>
+  </div>
+</section>
+<section class="xpage" data-sec="6" data-title="Ablation trade-offs">
+  <header class="s-head"><div class="kicker">Ablation in depth · 3 of 3 — trade-offs</div><h2>Why No Stage Wins Everything</h2></header>
+  <div class="s-body col">
+
+    <div class="g2 grow" style="gap:20px">
+      <div class="card col" style="gap:8px;border-top:6px solid #F59E0B"><h3>Resolution helps detection…</h3><p><b>Measured:</b> A2R has the highest MOTA (18.425), but more IDS (241) than A2 (210) and lower FPS (39.56).</p><p><b>Likely reason:</b> more pixels help find small objects, but more small objects close together give more chances to mix up IDs, and bigger inputs cost time.</p></div>
+      <div class="card col" style="gap:8px;border-top:6px solid #4F46E5"><h3>The full system helps identity quality…</h3><p><b>Measured:</b> A3 has the highest HOTA (33.064) and IDF1 (36.296), with IDS 271 and FPS 42.085. A2R has the lowest FPS (39.56).</p><p><b>Likely reason:</b> combining all adaptive parts keeps identities consistent for longer, while the extra processing still has a speed cost.</p></div>
+    </div>
+    <div class="tc"><span class="origin illus">interpretation, not a measured cause</span></div>
+    <div class="callout warn">Measured values are from the table; the “likely reasons” are our interpretation. The ablation did not isolate these causes separately.</div>
+  </div>
+</section>
+</div>
+<div class="xdeck" id="x-pareto" data-label="V2 multi-objective search">
+<section class="xpage" data-sec="7" data-title="Pareto two goals">
+  <header class="s-head"><div class="kicker">V2 multi-objective search · 1 of 3</div><h2>Searching for Two Goals at Once</h2></header>
+  <div class="s-body col">
+
+    <div class="g3" style="gap:18px">
+      <div class="card tc" style="border-top:6px solid #16A34A"><div class="ex-label">goal 1</div><div class="xeq">maximize MOTA</div></div>
+      <div class="card tc" style="border-top:6px solid #DC2626"><div class="ex-label">goal 2</div><div class="xeq">minimize IDS</div></div>
+      <div class="card tc" style="border-top:6px solid #64748B"><div class="ex-label">constraint</div><div class="xeq">FPS ≥ 25</div></div>
+    </div>
+    <div class="g2 grow" style="gap:22px">
+      <div class="card col" style="gap:8px"><h3>What changes from V1</h3><ul class="clean"><li>V1: one score (MOTA) + rules (FPS ≥ 25, IDS ≤ 271)</li><li>V2: <b>two scores</b> kept separate — no single “best” number</li><li>same search space, same TPE sampler and seed, validation videos only</li></ul></div>
+      <div class="card col" style="gap:8px"><h3>What one trial gives</h3><p>Each trial runs the full validation pipeline and returns <b>a pair</b>: (MOTA, IDS). Trials that break the FPS limit are not acceptable.</p><p class="small muted">50 trials were planned; <b>49</b> completed.</p></div>
+    </div>
+    <div class="tc"></div>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="Pareto dominance">
+  <header class="s-head"><div class="kicker">V2 multi-objective search · 2 of 3</div><h2>Dominance and the Pareto Front</h2></header>
+  <div class="s-body col">
+
+    <div class="row grow" style="gap:22px">
+      <div class="col" style="flex:0 0 640px;gap:10px">
+        <div class="card sec"><h3>Dominance</h3><p>Trial X <b>dominates</b> trial Y if X is at least as good on <b>both</b> goals and better on at least one.</p></div>
+        <table class="tbl" style="font-size:24px">
+          <tr><th style="text-align:left">Toy trial</th><th>MOTA</th><th>IDS</th><th style="text-align:left">On the front?</th></tr>
+          <tr><td>A</td><td>22</td><td>300</td><td style="text-align:left" class="good">yes — best MOTA</td></tr>
+          <tr><td>B</td><td>20</td><td>200</td><td style="text-align:left" class="good">yes — better IDS than A</td></tr>
+          <tr><td>C</td><td>19</td><td>250</td><td style="text-align:left" class="bad">no — B is better on both</td></tr>
+        </table>
+        <div class="note"><span class="origin illus">illustration · made-up numbers</span> for the toy table · the chart shows the real V2 front.</div>
+      </div>
+      <div class="card grow" style="padding:8px 12px"><div class="ex-label">Real V2 Pareto points (validation)</div><svg viewBox="0 0 700 390" width="100%" height="380"><g font-family="Inter,Helvetica" font-weight="800">
+          <line x1="60" y1="340" x2="680" y2="340" stroke="#94A3B8" stroke-width="2"/><line x1="60" y1="340" x2="60" y2="30" stroke="#94A3B8" stroke-width="2"/>
+          <path d="M98.2 307.1 L100.9 301.7 L106.4 231.2 L155.5 230.4 L158.2 217.5 L174.5 216.7 L190.9 179.5 L223.6 154.5 L245.5 140.1 L370.9 129.0 L384.5 111.6 L422.7 80.8 L501.8 69.9 L561.8 68.2 L575.5 66.8 L589.1 65.6 L627.3 65.0" fill="none" stroke="#0D9488" stroke-width="2.5" stroke-dasharray="6 5"/><circle cx="627.3" cy="65.0" r="9" fill="#14B8A6" stroke="#fff" stroke-width="2"/><circle cx="589.1" cy="65.6" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="575.5" cy="66.8" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="561.8" cy="68.2" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="501.8" cy="69.9" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="422.7" cy="80.8" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="384.5" cy="111.6" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="370.9" cy="129.0" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="245.5" cy="140.1" r="9" fill="#0D9488" stroke="#fff" stroke-width="2"/><circle cx="223.6" cy="154.5" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="190.9" cy="179.5" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="174.5" cy="216.7" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="158.2" cy="217.5" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="155.5" cy="230.4" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="106.4" cy="231.2" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="100.9" cy="301.7" r="6" fill="#5EEAD4" stroke="#fff" stroke-width="2"/><circle cx="98.2" cy="307.1" r="9" fill="#14B8A6" stroke="#fff" stroke-width="2"/>
+          <text x="627" y="48" font-size="20" fill="#0F766E" text-anchor="middle">T16</text><text x="258" y="128" font-size="20" fill="#0F766E">T22</text><text x="112" y="322" font-size="20" fill="#0F766E">T8</text>
+          <g font-size="19" fill="#64748B" text-anchor="middle"><text x="60" y="362">100</text><text x="333" y="362">200</text><text x="605" y="362">300</text></g>
+          <g font-size="19" fill="#64748B" text-anchor="end"><text x="52" y="345">10</text><text x="52" y="195">17</text><text x="52" y="45">24</text></g>
+          <text x="370" y="386" font-size="19" fill="#475569" text-anchor="middle">ID switches on validation (lower is better ←)</text>
+          <text x="20" y="190" font-size="19" fill="#475569" text-anchor="middle" transform="rotate(-90 20 190)">MOTA % (higher ↑)</text></g></svg></div>
+    </div>
+  </div>
+</section>
+<section class="xpage" data-sec="7" data-title="Pareto choose T22">
+  <header class="s-head"><div class="kicker">V2 multi-objective search · 3 of 3</div><h2>Why Trial 22 Was Selected</h2></header>
+  <div class="s-body col">
+
+    <div class="meaning"><div class="tag">The main idea</div><p>A front has <b>many</b> good trials, so a <b>selection rule fixed in advance</b> picks one: give <b>equal weight to both goals</b>. That rule selected <b>Trial 22</b>.</p></div>
+    <table class="tbl" style="font-size:26px">
+      <tr><th style="text-align:left">Front point (validation)</th><th>MOTA</th><th>IDS</th><th style="text-align:left">Character</th></tr>
+      <tr><td>Trial 16</td><td data-bind="v2.pareto.0.1" data-dec="2">…</td><td data-bind="v2.pareto.0.2">…</td><td style="text-align:left">highest MOTA, many IDS</td></tr>
+      <tr class="sel"><td>Trial 22 · selected</td><td data-bind="v2.val.mota" data-dec="2">…</td><td data-bind="v2.val.ids">…</td><td style="text-align:left"><b>balanced</b></td></tr>
+      <tr><td>Trial 8</td><td data-bind="v2.pareto.16.1" data-dec="2">…</td><td data-bind="v2.pareto.16.2">…</td><td style="text-align:left">fewest IDS, low MOTA</td></tr>
+    </table>
+    <div class="g2 grow" style="gap:20px">
+      <div class="card"><h3>Then frozen and tested</h3><p>Trial 22 was frozen and run on the test set: MOTA <b data-bind="testdev.rows.3.mota" data-dec="3">…</b>, IDS <b data-bind="testdev.rows.3.ids">…</b>, FPS <b data-bind="testdev.rows.3.fps" data-dec="3">…</b>.</p></div>
+      <div class="card"><h3>Read it correctly</h3><p>V2 is a <b>different operating point</b>, not a replacement for V1 — see the V1 vs V2 explanation.</p></div>
+    </div>
+    <div class="tc"><span class="origin optuna">optimization-selected</span></div>
+  </div>
+</section>
+
+<div class="xdeck" id="x-detection-tracking" data-label="Detection and tracking">
+<section class="xpage" data-sec="1" data-title="Detection example">
+  <header class="s-head"><div class="kicker">Detection and tracking · 1 of 2</div><h2>Detection Finds; Tracking Connects</h2></header>
+  <div class="s-body col"><div class="meaning"><div class="tag">Detection</div><p>For one frame, the detector finds a box, class and confidence. It does not know whether this object was seen before.</p></div><div class="g2 grow"><div class="card sec"><div class="img" style="height:320px"><img data-src="assets/figures/image2.png" alt="Object detections in one frame"></div><h3>One frame</h3><p>Example: the detector finds three cars and returns three boxes.</p></div><div class="card sec"><div class="img" style="height:320px"><img data-src="assets/figures/image3.png" alt="Object tracking across frames"></div><h3>Across frames</h3><p>Tracking links boxes over time and gives each object a stable ID.</p></div></div></div>
+</section>
+<section class="xpage" data-sec="1" data-title="Tracking example">
+  <header class="s-head"><div class="kicker">Detection and tracking · 2 of 2</div><h2>Why the ID Matters</h2></header>
+  <div class="s-body col"><div class="meaning"><div class="tag">Simple example</div><p>If a car is ID 4 in one frame and ID 9 after it returns from behind another car, the object may be the same but the identity was lost.</p></div><div class="flow"><div class="node io">Frame 1<br><small>car = ID 4</small></div><div class="arr"></div><div class="node fx">Hidden for a moment</div><div class="arr"></div><div class="node bad">Frame 2<br><small>car = ID 9</small></div></div><div class="callout">AC-MOT changes detector settings by scene difficulty; ByteTrack then uses the detections to keep IDs.</div></div>
+</section>
+</div>
+<div class="xdeck" id="x-literature" data-label="Literature survey">
+<section class="xpage" data-sec="2" data-title="Survey question"><header class="s-head"><div class="kicker">Literature survey · 1 of 2</div><h2>What We Checked in Prior Work</h2></header><div class="s-body col"><div class="meaning"><div class="tag">The survey question</div><p>Which detector and tracker choices give a useful balance of accuracy, speed and compute cost?</p></div><div class="g3 grow"><div class="card"><h3>Detectors</h3><p>We compared one-stage, two-stage and transformer-based detector families.</p></div><div class="card"><h3>Trackers</h3><p>We checked how tracking methods keep object identities across frames.</p></div><div class="card"><h3>Measures</h3><p>We looked at accuracy, speed, model size and real-time use.</p></div></div></div></section>
+<section class="xpage" data-sec="2" data-title="Survey conclusion"><header class="s-head"><div class="kicker">Literature survey · 2 of 2</div><h2>What the Survey Led Us To Test</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Conclusion</div><p>No single detector is best for every scene. A light detector can be a strong starting point when the system must run in real time.</p></div><div class="flow"><div class="node io">Survey evidence</div><div class="arr"></div><div class="node hot">YOLOv8n + ByteTrack</div><div class="arr"></div><div class="node good">Test scene-based control</div></div><div class="callout">The survey motivates our question; it does not replace the experiment.</div></div></section>
+</div>
+<div class="xdeck" id="x-problem" data-label="Research problem"><section class="xpage" data-sec="3" data-title="Fixed settings"><header class="s-head"><div class="kicker">Research problem</div><h2>Why Fixed Settings Can Fail</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Example</div><p>A clear scene may allow a strict detector. A dark or crowded scene may need a more careful setting. One fixed choice must serve both.</p></div><div class="g3 grow"><div class="card"><h3>Easy scene</h3><p>Few objects and clear boxes.</p></div><div class="card"><h3>Hard scene</h3><p>Small, hidden or blurred objects.</p></div><div class="card sec"><h3>Our question</h3><p>Can the settings follow the scene without retraining?</p></div></div></div></section></div>
+<div class="xdeck" id="x-method" data-label="AC-MOT method"><section class="xpage" data-sec="4" data-title="Method path"><header class="s-head"><div class="kicker">AC-MOT method</div><h2>Measure, Score, Then Set</h2></header><div class="s-body col"><div class="flow"><div class="node io">Previous boxes<br><small>+ small gray frame</small></div><div class="arr"></div><div class="node hot">Five cues</div><div class="arr"></div><div class="node hot">SCI score</div><div class="arr"></div><div class="node good">Detector settings</div></div><div class="g3 grow"><div class="card"><h3>Measure</h3><p>Read low-cost scene signals.</p></div><div class="card"><h3>Score</h3><p>Combine them into a value from easy to hard.</p></div><div class="card"><h3>Set</h3><p>Choose confidence, NMS IoU and input size.</p></div></div></div></section></div>
+<div class="xdeck" id="x-benchmark" data-label="Dataset setup"><section class="xpage" data-sec="5" data-title="Dataset setup"><header class="s-head"><div class="kicker">Dataset setup</div><h2>How the Main Experiment Was Checked</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Protocol</div><p>We use the VisDrone2019-MOT benchmark with a fixed train, validation and test-dev protocol. The validation set is used for choices; the held-out test set is used for the final check.</p></div><div class="g3 grow"><div class="card"><h3>Detector</h3><p>YOLOv8n</p></div><div class="card"><h3>Tracker</h3><p>ByteTrack</p></div><div class="card sec"><h3>Evaluation</h3><p>Tracking metrics are computed with the stated protocol.</p></div></div></div></section></div>
+<div class="xdeck" id="x-screening" data-label="Pre-Optuna screening"><section class="xpage" data-sec="7" data-title="Full pipeline sweep"><header class="s-head"><div class="kicker">Pre-Optuna screening · 1 of 2</div><h2>Every Screening Point Runs the Full Pipeline</h2></header><div class="s-body col"><div class="flow"><div class="node io">One setting value</div><div class="arr"></div><div class="node fx">YOLOv8n</div><div class="arr"></div><div class="node fx">ByteTrack</div><div class="arr"></div><div class="node good">TrackEval</div></div><div class="callout">We change one parameter, keep the others fixed, run the seven validation videos, and record MOTA, HOTA, IDF1, IDS and FPS.</div></div></section><section class="xpage" data-sec="7" data-title="Screening counts"><header class="s-head"><div class="kicker">Pre-Optuna screening · 2 of 2</div><h2>What Was Screened Before Optuna?</h2></header><div class="s-body col"><div class="g4 grow"><div class="kpi"><div class="l">Input size</div><div class="v">15</div><div class="s">values from 512 to 960</div></div><div class="kpi"><div class="l">Confidence</div><div class="v">10</div><div class="s">values from 0.05 to 0.50</div></div><div class="kpi"><div class="l">NMS IoU</div><div class="v">11</div><div class="s">values from 0.30 to 0.80</div></div><div class="kpi"><div class="l">Temporal</div><div class="v">25</div><div class="s">5 windows × 5 strides</div></div></div><div class="callout">These 61 screening configurations narrowed the practical search space before the 50 Optuna trials.</div></div></section></div>
+<div class="xdeck" id="x-temporal" data-label="Temporal sweep"><section class="xpage" data-sec="7" data-title="Temporal grid"><header class="s-head"><div class="kicker">Temporal screening · 1 of 2</div><h2>Why There Were 25 Temporal Configurations</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Cartesian product</div><p>We test every smoothing-window choice with every analysis-stride choice.</p></div><div class="flow"><div class="node io">5 window values</div><div class="arr"></div><div class="node hot">×</div><div class="arr"></div><div class="node io">5 stride values</div><div class="arr"></div><div class="node good">25 pairs</div></div><div class="callout">Each pair is a complete validation run. It is not 25 single-frame checks.</div></div></section><section class="xpage" data-sec="7" data-title="Temporal choice"><header class="s-head"><div class="kicker">Temporal screening · 2 of 2</div><h2>What Was Frozen for V1</h2></header><div class="s-body col"><div class="g2 grow"><div class="card sec"><h3>Smoothing window = 7</h3><p>Use recent SCI values together so the control signal is more stable.</p></div><div class="card sec"><h3>Analysis stride = 10</h3><p>Update the scene analysis at a fixed step instead of every frame.</p></div></div><div class="callout">The selected pair is frozen before the later V1 optimization.</div></div></section></div>
+<div class="xdeck" id="x-choice" data-label="V1 and V2 choice"><section class="xpage" data-sec="7" data-title="Choice example"><header class="s-head"><div class="kicker">V1 and V2 choice</div><h2>V1 and V2 Answer Different Priorities</h2></header><div class="s-body col"><div class="g2 grow"><div class="card sec"><h3>V1</h3><p>Choose one operating point mainly for overall tracking quality, while meeting the speed and identity rules.</p></div><div class="card sec"><h3>V2</h3><p>Keep quality and identity switches as separate goals, then choose a balanced point.</p></div></div><div class="callout">They are two measured operating points, not two different detectors.</div></div></section></div>
+<div class="xdeck" id="x-bootstrap" data-label="Paired bootstrap"><section class="xpage" data-sec="8" data-title="Bootstrap meaning"><header class="s-head"><div class="kicker">Paired bootstrap · 1 of 2</div><h2>What the Paired Bootstrap Checks</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Same sequences, paired comparison</div><p>For each validation or test sequence, compare the two systems on that same sequence. Then resample the sequence pairs many times.</p></div><div class="flow"><div class="node io">Same sequence</div><div class="arr"></div><div class="node hot">V1 − V2</div><div class="arr"></div><div class="node good">Confidence interval</div></div></div></section><section class="xpage" data-sec="8" data-title="Bootstrap reading"><header class="s-head"><div class="kicker">Paired bootstrap · 2 of 2</div><h2>How to Read the Result</h2></header><div class="s-body col"><div class="g3 grow"><div class="card"><h3>Difference</h3><p>Shows the measured change between the two systems.</p></div><div class="card"><h3>Interval</h3><p>Shows how much the sequence sample can change the estimate.</p></div><div class="card sec"><h3>Fairness</h3><p>Pairing removes the effect of comparing different videos.</p></div></div><div class="callout">This is a check on the result, not a new tuning stage.</div></div></section></div>
+<div class="xdeck" id="x-u2mot" data-label="U2MOT transfer"><section class="xpage" data-sec="9" data-title="U2MOT reproduction"><header class="s-head"><div class="kicker">U2MOT transfer · 1 of 4</div><h2>Independent Reproduction Before Adaptation</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Fair transfer test</div><p>First run the published U2MOT method as an independent reproduction. Then apply AC-MOT around the detector without changing the base method.</p></div><div class="flow"><div class="node io">Published method</div><div class="arr"></div><div class="node fx">Independent run</div><div class="arr"></div><div class="node good">AC-MOT transfer</div></div><div class="note">Small differences can come from software-version and implementation details; the presentation keeps this distinction visible.</div></div></section><section class="xpage" data-sec="9" data-title="U2MOT SCI boundaries"><header class="s-head"><div class="kicker">U2MOT transfer · 2 of 4</div><h2>Why the SCI Boundaries Changed</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Validation range</div><p>The U2MOT validation SCI range is <b>0.34155</b> to <b>0.72456</b>, with mean <b>0.55452</b> and median <b>0.54897</b>.</p></div><div class="flow"><div class="node good">SCI &lt; 0.5185<br><small>Easy</small></div><div class="node hot">0.5185–0.5896<br><small>Medium</small></div><div class="node bad">SCI ≥ 0.5896<br><small>Hard</small></div></div><div class="callout">The SCI weights and temporal settings stay the same; only the labels are recalibrated to the new validation range.</div></div></section><section class="xpage" data-sec="9" data-title="U2MOT controller"><header class="s-head"><div class="kicker">U2MOT transfer · 3 of 4</div><h2>How the U2MOT Controller Uses SCI</h2></header><div class="s-body col"><div class="flow"><div class="node io">SCI score</div><div class="arr"></div><div class="node hot">Easy / Medium / Hard</div><div class="arr"></div><div class="node good">Frozen detector policy</div></div><div class="g3 grow"><div class="card"><h3>Easy</h3><p>Use the easy-scene operating choice.</p></div><div class="card"><h3>Medium</h3><p>Use the middle operating choice.</p></div><div class="card"><h3>Hard</h3><p>Use the hard-scene operating choice.</p></div></div><div class="callout">The controller changes settings; it does not retrain the detector.</div></div></section><section class="xpage" data-sec="9" data-title="U2MOT final test"><header class="s-head"><div class="kicker">U2MOT transfer · 4 of 4</div><h2>Final Test: What We Claim</h2></header><div class="s-body col"><div class="meaning"><div class="tag">Read the comparison carefully</div><p>The final test compares the frozen base method with the frozen AC-MOT version under the same test protocol.</p></div><div class="g2 grow"><div class="card"><h3>Quality</h3><p>Read MOTA, HOTA and IDF1 together.</p></div><div class="card"><h3>Identity and speed</h3><p>Read IDS and FPS together with quality.</p></div></div><div class="note">This is a transfer result on U2MOT, not a claim that the original paper reported AC-MOT.</div></div></section></div>
+<div class="xdeck" id="x-conclusion" data-label="Conclusion"><section class="xpage" data-sec="10" data-title="Full story"><header class="s-head"><div class="kicker">Conclusion · 1 of 2</div><h2>The Full AC-MOT Story</h2></header><div class="s-body col"><div class="flow"><div class="node io">Scene changes</div><div class="arr"></div><div class="node hot">SCI measures difficulty</div><div class="arr"></div><div class="node hot">Controller selects settings</div><div class="arr"></div><div class="node good">Tracking is tested fairly</div></div><div class="callout">The key idea is a lightweight control layer around a fixed detector and tracker.</div></div></section><section class="xpage" data-sec="10" data-title="Conclusion"><header class="s-head"><div class="kicker">Conclusion · 2 of 2</div><h2>What We Can Say</h2></header><div class="s-body col"><div class="g3 grow"><div class="card"><h3>Method</h3><p>AC-MOT uses five low-cost cues and no retraining.</p></div><div class="card"><h3>Evidence</h3><p>Choices are made on validation and checked on held-out tests.</p></div><div class="card sec"><h3>Limit</h3><p>Speed, identity and quality must be read as a trade-off.</p></div></div></div></section></div>
+<div class="xdeck" id="x-contributions" data-label="Main contributions"><section class="xpage" data-sec="10" data-title="Contributions"><header class="s-head"><div class="kicker">Main contributions</div><h2>What This Work Adds</h2></header><div class="s-body col"><div class="g2 grow"><div class="card sec"><h3>1 · Lightweight SCI</h3><p>Five low-cost cues describe scene difficulty.</p></div><div class="card sec"><h3>2 · Adaptive control</h3><p>Detector settings follow the scene.</p></div><div class="card sec"><h3>3 · Validation-driven choices</h3><p>Weights, boundaries and operating settings are selected from validation evidence.</p></div><div class="card sec"><h3>4 · No retraining</h3><p>The control layer works around the detector and needs no new training data.</p></div></div></div></section></div>
+<div class="xdeck" id="x-future" data-label="Future work"><section class="xpage" data-sec="10" data-title="Future work"><header class="s-head"><div class="kicker">Future work</div><h2>Where the Work Can Go Next</h2></header><div class="s-body col"><div class="g2 grow"><div class="card sec"><h3>Radar-assisted tracking</h3><p>Fuse radar position and speed with image detections to help keep IDs during occlusion, blur and camera motion.</p></div><div class="card sec"><h3>Journal paper</h3><p>Prepare an extended AC-MOT paper. Journal choice and submission timing follow supervisor review.</p></div></div><div class="callout">These are planned next steps, not completed experiments.</div></div></section></div>
+
+</div>
+</div>
+</div>
+<script src="assets/data/results.js"></script>
+<script src="assets/data/cue_examples.js"></script>
+<script src="assets/data/meaning.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

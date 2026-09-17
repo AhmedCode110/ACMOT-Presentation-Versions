@@ -1,0 +1,57 @@
+{
+  "freeze_name": "FINAL_U2MOT_ACMOT_FREEZE_2026-09-14",
+  "freeze_date": "2026-09-14",
+  "framework": "U2MOT",
+  "u2mot_commit": "7411211d17cb893f5fcd6be39cd4e5f91cfe1586",
+  "checkpoint_sha256": "8cb39ca273dbe620a8551a247b72865ad4f870225351d0937e306980c594c939",
+  "validation": {
+    "baseline": {
+      "MOTA": 75.12732,
+      "IDF1": 75.557816,
+      "IDS": 1947,
+      "FP": 8837,
+      "FN": 7091
+    },
+    "full_acmot": {
+      "MOTA": 75.473798,
+      "IDF1": 76.577452,
+      "IDS": 1908,
+      "FP": 7992,
+      "FN": 7726
+    }
+  },
+  "matched_runtime": {
+    "baseline_fps": 3.707,
+    "full_acmot_fps": 4.663,
+    "relative_improvement_percent": 25.76
+  },
+  "test_dev": {
+    "baseline_A0": {
+      "MOTA": 53.9,
+      "IDF1": 69.8,
+      "IDS": 1239,
+      "FP": 41385,
+      "FN": 63241
+    },
+    "full_acmot": {
+      "MOTA": 53.766786,
+      "IDF1": 69.84939,
+      "IDS": 1152,
+      "FP": 40155,
+      "FN": 64801
+    },
+    "delta": {
+      "MOTA": -0.133214,
+      "IDF1": 0.04939,
+      "IDS": -87,
+      "FP": -1230,
+      "FN": 1560
+    }
+  },
+  "scientific_policy": {
+    "validation_used_for_model_selection": true,
+    "test_dev_used_for_tuning": false,
+    "controller_locked_before_test_dev": true,
+    "post_test_tuning_forbidden": true
+  }
+}

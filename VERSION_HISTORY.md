@@ -54,6 +54,7 @@ of the previous one plus the listed changes; older versions were never overwritt
 | **v66** | **33** | **89 explanation pages** | **Made the video library visibly flex-open above the deck and added an explicit Full screen video button for the selected AC-MOT or Baseline clip** |
 | **v67** | **33** | **89 explanation pages** | **Verified the video panel in a local browser, made slide 15 open the exact AC-MOT vs Baseline comparison clip, and updated the version label** |
 | **v68** | **33** | **89 explanation pages** | **Prepared the live release with a visible video panel, direct AC-MOT vs Baseline clip, and explicit full-screen video control** |
+| **v69** | **33** | **89 explanation pages** | **Verified slide 15's video button end to end: the player can no longer be pushed off the panel, the Full screen video control is large and sits on the selected clip, and full screen now falls back to a full-window view when the browser blocks it** |
 | **v31** | **96** | **59 (17 topics)** | **Restored the missing pre-Optuna chronology: resolution, confidence, NMS IoU and 25 temporal screening configurations, with the frozen window 7 / stride 10 choices shown before V1** |
 | **v32** | **96** | **59 (17 topics)** | **Temporal slide now lists all tested windows (1, 3, 5, 7, 9), strides (1, 5, 10, 15, 20), the 25-pair sweep, validation selection rule and selected metrics; CSV filenames removed from the slide** |
 | **v33** | **97** | **59 (17 topics)** | **Added a dedicated slide explaining that every screening point was a full seven-video pipeline run: one parameter changed, YOLOv8n → ByteTrack → TrackEval, then MOTA / HOTA / IDF1 / IDS / FPS recorded** |
@@ -69,6 +70,16 @@ of the previous one plus the listed changes; older versions were never overwritt
 | **v43** | **103** | **59 (17 topics)** | **Expanded the SCI frame-preparation explanation: separate box and visual paths, exact 25% pixel calculation, threshold domain and no object detection from the small image** |
 
 ---
+
+## v69-video-fullscreen-verified  ← current
+- Request (author, 2026-09-18): verify that slide 15 "Ablation result" really opens the AC-MOT vs Baseline videos, that the video window is clearly visible, and that "Full screen video" actually puts the video in browser full screen; add a fallback where full screen is not supported. Copied from v68; v68 and all older versions unchanged.
+- **Video window visibility.** In v68 the player could be pushed below the panel on short or narrow windows: measured at 387x551 the video sat at y 494-604 while the panel ended at y 540, so it was off screen and unreachable. `.mstage` now scrolls instead of spilling, `.mplayer` keeps a minimum height (`clamp(210px, 42vh, 600px)`), the video tabs stay on one scrollable row below 1050 px, and a short-window rule (max-height 760 px) trims the header. Re-measured at 387x551: the video is fully inside the panel and the viewport with no scrolling.
+- **Full screen.** The old handler tried only `requestFullscreen` / `webkitRequestFullscreen`, with no error handling and no fallback. It now covers the standard, WebKit and MS APIs plus Safari/iOS `webkitEnterFullscreen`, catches rejections, and carries a 900 ms watchdog because some embedded frames never settle the returned promise. If full screen cannot be entered, the video switches to a full-window view with a short explanation and the buttons read "Exit full screen"; Esc leaves that view first and only then closes the library.
+- **Controls.** `.mfull` grew from 16 px / 10-16 px padding to 21 px / 14-26 px with a focus ring, and a second large button now sits directly on the selected video, so the clip always carries its own visible full-screen control.
+- **Fix found while testing:** the new video toggle was first named `toggleFull()`, which collided with the existing presentation-mode `toggleFull()` later in `script.js`; hoisting meant the button ran page full screen instead. Renamed to `toggleVideoFull()`.
+- Unchanged: the five local MP4 files, the separate picture library, lazy loading (only the selected clip is requested and only one `<video>` is in the DOM at a time), fonts, colors, layout, navigation and all scientific content.
+- Verified: HTML structure parses with 0 errors; slide 15 is "Ablation result" and opens the library on `acmot_baseline_vs_final_uav0000249.mp4`; all five clips decode with real dimensions and durations and no media errors; picture library holds 32 images and 0 videos. Full-screen branches exercised: API granted -> real full screen and no fallback; Safari path -> `webkitEnterFullscreen` called; no support -> fallback; blocked/hanging promise -> watchdog fallback. Native OS full screen itself could not be observed in the available preview browser, which blocks the Fullscreen API by permissions policy.
+
 
 ## v01-original-reference
 - The first interactive HTML deck (redesigned content, light theme, charts, notes, overview, lightbox, tabs, videos).
@@ -111,7 +122,7 @@ of the previous one plus the listed changes; older versions were never overwritt
 ## v08-story-ends-with-v2-no-u2mot
 - Request: no U2MOT anywhere. Transfer section (divider + 2 U2MOT slides), Outline card and the U2MOT phrase on the future-work slide removed; Contributions and Conclusion became Section VIII.
 
-## v30-chart-zoom-redraw  ← current (local only; publishing paused until a final version)
+## v30-chart-zoom-redraw
 - Request (author, 2026-09-15): when a chart is clicked it should grow into a clear picture with its real shape and animation — not flattened and not with numbers on top of each other (e.g. the result and comparison charts on slide 57).
 - Cause: the old zoom copied the small chart and stretched it with a CSS scale, so a flat 94-px chart stayed flat, its labels stayed crowded, and the copy was shown already drawn.
 - `script.js`: new `openChartZoom()` — a click on any `[data-chart]` redraws that chart from its data in the lightbox at full size (up to 90% of the window width and 82% of its height, height / width kept between 0.5 and 0.9), so ticks, labels and values are laid out for the big size; the grow / fade animation plays; a click on the big chart plays it again; Esc or a click outside closes it. Pictures, videos and diagrams keep the old zoom.

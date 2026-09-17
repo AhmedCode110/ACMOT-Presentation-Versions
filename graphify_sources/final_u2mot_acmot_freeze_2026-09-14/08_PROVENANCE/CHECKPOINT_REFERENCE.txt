@@ -1,0 +1,23 @@
+CHECKPOINT REFERENCE
+====================
+
+Filename:
+visdrone.pth.tar
+
+Original official U2MOT checkpoint.
+
+Google Drive file ID:
+1ajehBs9enBHhuBqGIoQPGqkkzasE9d3o
+
+SHA256:
+8cb39ca273dbe620a8551a247b72865ad4f870225351d0937e306980c594c939
+
+Local project reference:
+/content/drive/MyDrive/AC-MOT-U2MOT-NEW/checkpoints/visdrone.pth.tar
+
+NOTE:
+Checkpoint binary is intentionally NOT duplicated
+inside this freeze package to avoid unnecessary
+~806 MB duplication.
+
+Reproduction must verify the SHA256 above.

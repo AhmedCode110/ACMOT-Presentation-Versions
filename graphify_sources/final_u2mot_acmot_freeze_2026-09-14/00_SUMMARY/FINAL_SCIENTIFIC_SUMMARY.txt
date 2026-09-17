@@ -1,0 +1,333 @@
+AC-MOT + U2MOT FINAL SCIENTIFIC FREEZE
+======================================
+
+Freeze date:
+2026-09-14
+
+
+PROJECT PURPOSE
+---------------
+
+This package contains the complete controlled
+U2MOT + AC-MOT transfer experiment.
+
+The objective was to evaluate whether AC-MOT,
+originally developed using a lightweight
+YOLOv8n + ByteTrack pipeline, could transfer
+to a stronger published MOT framework while
+keeping the published detector/tracker system
+fixed.
+
+
+PUBLISHED FRAMEWORK
+-------------------
+
+Framework:
+U2MOT
+
+Paper:
+Uncertainty-aware Unsupervised Multi-Object Tracking
+ICCV 2023
+
+Official repository:
+alibaba/u2mot
+
+Pinned commit:
+7411211d17cb893f5fcd6be39cd4e5f91cfe1586
+
+Detector:
+YOLOX-X
+
+Tracker:
+U2MOT
+
+Checkpoint:
+Official released VisDrone checkpoint
+
+Checkpoint SHA256:
+8cb39ca273dbe620a8551a247b72865ad4f870225351d0937e306980c594c939
+
+
+AC-MOT SCI
+----------
+
+V1 SCI weights were preserved.
+
+crowd:
+0.12949277455301997
+
+tiny:
+0.22174766876599927
+
+edge:
+0.43371337893805056
+
+night:
+0.05355765312756694
+
+blur:
+0.16148852461536325
+
+smoothing window:
+7
+
+analysis stride:
+10
+
+
+VALIDATION-CALIBRATED BOUNDARIES
+--------------------------------
+
+mid:
+0.5185453065646133
+
+high:
+0.5895547895440134
+
+
+ADAPTIVE ACTIONS
+----------------
+
+Easy:
+
+confidence:
+0.15
+
+NMS:
+0.70
+
+resolution:
+1280 x 704
+
+
+Medium:
+
+confidence:
+0.12
+
+NMS:
+0.65
+
+resolution:
+1440 x 800
+
+
+Hard:
+
+confidence:
+0.09
+
+NMS:
+0.60
+
+resolution:
+1600 x 896
+
+
+TRACKER — FIXED
+---------------
+
+track_high_thresh:
+0.5
+
+track_low_thresh:
+0.1
+
+match_thresh:
+0.8
+
+track_buffer:
+15
+
+
+VALIDATION RESULT
+-----------------
+
+Dataset:
+VisDrone2019-MOT-val
+
+Sequences:
+7
+
+Frames:
+2846
+
+
+Baseline:
+
+MOTA:
+75.127320
+
+IDF1:
+75.557816
+
+IDS:
+1947
+
+FP:
+8837
+
+FN:
+7091
+
+
+Full AC-MOT:
+
+MOTA:
+75.473798
+
+IDF1:
+76.577452
+
+IDS:
+1908
+
+FP:
+7992
+
+FN:
+7726
+
+
+Validation delta:
+
+MOTA:
++0.346478
+
+IDF1:
++1.019636
+
+IDS:
+-39
+
+FP:
+-845
+
+FN:
++635
+
+
+MATCHED RUNTIME RESULT
+----------------------
+
+Fixed matched baseline:
+3.707 FPS
+
+Full AC-MOT:
+4.663 FPS
+
+Relative speed improvement:
++25.76%
+
+
+FINAL HELD-OUT TEST-DEV
+-----------------------
+
+Dataset:
+VisDrone2019-MOT-test-dev
+
+Sequences:
+17
+
+Frames:
+6635
+
+Official file CMC:
+enabled
+
+
+A0 reproduced U2MOT baseline:
+
+MOTA:
+53.900
+
+IDF1:
+69.800
+
+IDS:
+1239
+
+FP:
+41385
+
+FN:
+63241
+
+
+Frozen Full AC-MOT:
+
+MOTA:
+53.766786
+
+IDF1:
+69.849390
+
+IDS:
+1152
+
+FP:
+40155
+
+FN:
+64801
+
+
+Final delta:
+
+MOTA:
+-0.133214
+
+IDF1:
++0.049390
+
+IDS:
+-87
+
+FP:
+-1230
+
+FN:
++1560
+
+
+FINAL INTERPRETATION
+--------------------
+
+The frozen held-out experiment does NOT show
+MOTA superiority over reproduced U2MOT.
+
+Instead, AC-MOT shifts the operating point:
+
+- MOTA approximately preserved
+- IDF1 approximately preserved
+- ID switches reduced
+- false positives reduced
+- false negatives increased
+
+This result is retained exactly as obtained.
+No test-dev tuning was performed after observing
+the final result.
+
+
+SCIENTIFIC STATUS
+-----------------
+
+Validation:
+used for SCI calibration and model selection.
+
+Test-dev:
+held-out final evaluation.
+
+Final controller:
+locked before test-dev.
+
+No parameter may be changed and re-evaluated
+on this test-dev split for model-selection claims.
+
+
+IMPORTANT
+---------
+
+Historical AC-MOT files and datasets outside this
+freeze remain read-only and are not modified by
+this package.

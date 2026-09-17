@@ -1,0 +1,86 @@
+diff --git a/tools/track.py b/tools/track.py
+index 21a5000..9130cec 100644
+--- a/tools/track.py
++++ b/tools/track.py
+@@ -306,7 +306,7 @@ def main(exp, args):
+         else:
+             ckpt_file = args.ckpt
+         logger.info("loading checkpoint")
+-        ckpt = torch.load(ckpt_file, map_location="cpu")
++        ckpt = torch.load(ckpt_file, map_location="cpu", weights_only=False)
+         # load the model state dict
+         model.load_state_dict(ckpt["model"])
+         logger.info("loaded checkpoint done.")
+diff --git a/yolox/tracker/gmc.py b/yolox/tracker/gmc.py
+index 4af791f..952a1e2 100644
+--- a/yolox/tracker/gmc.py
++++ b/yolox/tracker/gmc.py
+@@ -252,7 +252,7 @@ class GMC:
+     def applyFile(self, raw_frame=None, detections=None):
+         line = self.gmcFile.readline()
+         tokens = line.split("\t")
+-        H = np.eye(2, 3, dtype=np.float_)
++        H = np.eye(2, 3, dtype=np.float64)
+         if len(tokens) > 6:
+             H[0, 0] = float(tokens[1])
+             H[0, 1] = float(tokens[2])
+diff --git a/yolox/tracker/matching.py b/yolox/tracker/matching.py
+index 244e27d..d1fc46b 100644
+--- a/yolox/tracker/matching.py
++++ b/yolox/tracker/matching.py
+@@ -62,13 +62,13 @@ def ious(atlbrs, btlbrs):
+ 
+     :rtype ious np.ndarray
+     """
+-    ious = np.zeros((len(atlbrs), len(btlbrs)), dtype=np.float)
++    ious = np.zeros((len(atlbrs), len(btlbrs)), dtype=float)
+     if ious.size == 0:
+         return ious
+ 
+     ious = bbox_ious(
+-        np.ascontiguousarray(atlbrs, dtype=np.float),
+-        np.ascontiguousarray(btlbrs, dtype=np.float)
++        np.ascontiguousarray(atlbrs, dtype=float),
++        np.ascontiguousarray(btlbrs, dtype=float)
+     )
+ 
+     return ious
+@@ -122,13 +122,13 @@ def embedding_distance(tracks, detections, metric='cosine'):
+     :return: cost_matrix np.ndarray
+     """
+ 
+-    cost_matrix = np.zeros((len(tracks), len(detections)), dtype=np.float)
++    cost_matrix = np.zeros((len(tracks), len(detections)), dtype=float)
+     if cost_matrix.size == 0:
+         return cost_matrix
+-    det_features = np.asarray([track.curr_feat for track in detections], dtype=np.float)    # [detection_num, emd_dim]
++    det_features = np.asarray([track.curr_feat for track in detections], dtype=float)    # [detection_num, emd_dim]
+     #for i, track in enumerate(tracks):
+         #cost_matrix[i, :] = np.maximum(0.0, cdist(track.smooth_feat.reshape(1,-1), det_features, metric))
+-    track_features = np.asarray([track.smooth_feat for track in tracks], dtype=np.float)    # [track_num, emd_dim]
++    track_features = np.asarray([track.smooth_feat for track in tracks], dtype=float)    # [track_num, emd_dim]
+     cost_matrix = np.maximum(0.0, cdist(track_features, det_features, metric))  # Nomalized features, metric: cosine, [track_num, detection_num]
+     return cost_matrix
+ 
+diff --git a/yolox/tracker/u2mot_tracker.py b/yolox/tracker/u2mot_tracker.py
+index 710e72c..313874a 100644
+--- a/yolox/tracker/u2mot_tracker.py
++++ b/yolox/tracker/u2mot_tracker.py
+@@ -15,7 +15,7 @@ class STrack(BaseTrack):
+     def __init__(self, tlwh, score, cls=0, feat=None, feat_history=50):
+ 
+         # wait activate
+-        self._tlwh = np.asarray(tlwh, dtype=np.float)
++        self._tlwh = np.asarray(tlwh, dtype=float)
+         self.kalman_filter = None
+         self.mean, self.covariance = None, None
+         self.is_activated = False
+@@ -352,7 +352,7 @@ class U2MOTTracker(object):
+             unpaired_j[j[~invalid]] = False
+             i1, j1 = i0[unpaired_i], j0[unpaired_j]
+ 
+-            det_features = np.asarray([track.curr_feat for track in detections], dtype=np.float)
++            det_features = np.asarray([track.curr_feat for track in detections], dtype=float)
+             trk_features_trklet = [np.stack(list(track.features)[-5:]) for track in strack_pool]
+ 
+             similarity2 = np.zeros((len(i1), len(j1)))

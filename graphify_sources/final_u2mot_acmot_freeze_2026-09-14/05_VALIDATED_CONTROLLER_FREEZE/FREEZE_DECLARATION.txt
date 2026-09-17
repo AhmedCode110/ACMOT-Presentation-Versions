@@ -1,0 +1,94 @@
+U2MOT + FULL AC-MOT — VALIDATED FREEZE
+======================================
+
+Freeze date:
+2026-09-14
+
+U2MOT commit:
+7411211d17cb893f5fcd6be39cd4e5f91cfe1586
+
+Checkpoint SHA256:
+8cb39ca273dbe620a8551a247b72865ad4f870225351d0937e306980c594c939
+
+
+VALIDATION RESULT
+-----------------
+
+Baseline MOTA:
+75.127320
+
+Full AC-MOT MOTA:
+75.473798
+
+Delta:
++0.346478
+
+
+Baseline IDF1:
+75.557816
+
+Full AC-MOT IDF1:
+76.577452
+
+Delta:
++1.019636
+
+
+Baseline IDS:
+1947
+
+Full AC-MOT IDS:
+1908
+
+Delta:
+-39
+
+
+Baseline FP:
+8837
+
+Full AC-MOT FP:
+7992
+
+Delta:
+-845
+
+
+MATCHED RUNTIME
+---------------
+
+Fixed U2MOT:
+3.707 FPS
+
+Full AC-MOT:
+4.663 FPS
+
+Speed improvement:
++25.76%
+
+
+FINAL TEST RULE
+---------------
+
+The controller is now LOCKED.
+
+No SCI weight,
+threshold,
+confidence,
+NMS,
+resolution,
+or tracker parameter
+may be changed based on
+VisDrone test-dev results.
+
+Next experiment:
+
+VisDrone2019-MOT-test-dev
+17 sequences
+6635 frames
+
+Baseline:
+already reproduced.
+
+Full AC-MOT:
+final evaluation only.

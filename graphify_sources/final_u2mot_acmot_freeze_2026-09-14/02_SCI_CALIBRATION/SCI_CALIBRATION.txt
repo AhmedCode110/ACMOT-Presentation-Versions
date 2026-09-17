@@ -1,0 +1,69 @@
+U2MOT FULL AC-MOT
+SCI VALIDATION CALIBRATION
+==========================
+
+Purpose:
+Calibrate only SCI regime boundaries.
+
+Dataset:
+VisDrone2019-MOT-val
+
+Test-dev used:
+NO
+
+Ground-truth metrics used:
+NO
+
+MOTA used:
+NO
+
+IDF1 used:
+NO
+
+IDS used:
+NO
+
+SCI weights:
+V1 weights unchanged.
+
+Old V1 thresholds:
+mid  = 0.13534938199219218
+high = 0.28728676236279177
+
+Observed validation SCI:
+min    = 0.3415474317505644
+mean   = 0.5545249685898096
+median = 0.5489718423107199
+max    = 0.7245564359745431
+
+Calibration method:
+Unsupervised validation quantiles.
+
+NEW mid:
+0.5185453065646133
+
+NEW high:
+0.5895547895440134
+
+Definition:
+easy   = SCI < q33
+medium = q33 <= SCI < q67
+hard   = SCI >= q67
+
+Detector during profiling:
+conf = 0.09
+NMS = 0.70
+size = 896 x 1600
+
+AC-MOT actions during profiling:
+DISABLED
+
+CMC:
+none
+
+Reason for CMC none:
+Official U2MOT repository contains
+VisDrone file-CMC for test-dev only.
+
+Elapsed seconds:
+887.3607055699999

@@ -1,0 +1,8 @@
+{
+  "stage": "joint_optuna",
+  "expected_output": "/content/drive/MyDrive/AC-MOT-shared/defensible_acmot_3workers/FROZEN_DEFENSIBLE_ACMOT_CONFIG.json",
+  "target_trials": 50,
+  "worker_id": 3,
+  "smoke": false,
+  "timestamp_unix": 1789137350.9622543
+}

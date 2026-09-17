@@ -1,0 +1,22 @@
+Evaluation compatibility note
+
+Environment:
+NumPy 2.1.3
+motmetrics 1.4.0
+
+Problem:
+motmetrics 1.4.0 calls np.asfarray.
+np.asfarray was removed in NumPy 2.
+
+Runtime-only compatibility alias:
+np.asfarray(a, dtype)
+=
+np.asarray(a, dtype=dtype)
+
+The official U2MOT eval_visdrone.py file was NOT modified.
+
+Tracking predictions were NOT modified.
+
+Ground-truth annotations were NOT modified.
+
+Evaluation protocol was NOT modified.
